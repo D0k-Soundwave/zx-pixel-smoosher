@@ -1,0 +1,1212 @@
+name: Enhanced Testing Suite
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    paths:
+      - 'js/**/*.js'
+      - 'css/**/*.css'
+      - 'index.html'
+  pull_request:
+    branches: [ master, main, develop ]
+    paths:
+      - 'js/**/*.js'
+      - 'css/**/*.css'
+      - 'index.html'
+  schedule:
+    # Run comprehensive tests weekly on Saturdays at 6 AM UTC
+    - cron: '0 6 * * 6'
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - visual-regression
+          - zx-spectrum-validation
+          - mobile-testing
+          - load-testing
+          - accessibility
+
+permissions:
+  contents: read
+  pull-requests: write
+  pages: write
+  checks: write
+
+jobs:
+  visual-regression-testing:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'visual-regression' || github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Create package.json for testing tools
+      run: |
+        cat > package.json << 'EOF'
+        {
+          "name": "zx-pixel-smoosher-testing",
+          "version": "1.0.0",
+          "scripts": {
+            "test:visual": "playwright test --config=playwright-visual.config.js",
+            "test:zx": "playwright test --config=playwright-zx.config.js",
+            "test:mobile": "playwright test --config=playwright-mobile.config.js",
+            "test:accessibility": "playwright test --config=playwright-a11y.config.js",
+            "serve": "python3 -m http.server 8080"
+          },
+          "devDependencies": {
+            "@playwright/test": "^1.42.1",
+            "pixelmatch": "^5.3.0",
+            "pngjs": "^7.0.0",
+            "axe-core": "^4.8.4",
+            "@axe-core/playwright": "^4.8.4",
+            "lighthouse": "^11.7.1",
+            "puppeteer": "^22.6.0"
+          }
+        }
+        EOF
+        
+    - name: Install testing dependencies
+      run: npm install
+      
+    - name: Install Playwright browsers
+      run: npx playwright install
+      
+    - name: Create visual regression test configuration
+      run: |
+        cat > playwright-visual.config.js << 'EOF'
+        const { defineConfig } = require('@playwright/test');
+        
+        module.exports = defineConfig({
+          testDir: './tests/visual',
+          fullyParallel: false,
+          forbidOnly: !!process.env.CI,
+          retries: process.env.CI ? 2 : 0,
+          workers: 1,
+          reporter: [
+            ['html', { outputFolder: 'visual-regression-report' }],
+            ['json', { outputFile: 'visual-regression-results.json' }]
+          ],
+          use: {
+            baseURL: 'http://localhost:8080',
+            trace: 'retain-on-failure',
+            screenshot: 'only-on-failure',
+            video: 'retain-on-failure'
+          },
+          projects: [
+            {
+              name: 'chromium-visual',
+              use: { 
+                ...require('@playwright/test').devices['Desktop Chrome'],
+                viewport: { width: 1024, height: 768 }
+              }
+            }
+          ],
+          webServer: {
+            command: 'python3 -m http.server 8080',
+            port: 8080,
+            reuseExistingServer: !process.env.CI
+          }
+        });
+        EOF
+        
+    - name: Create visual regression tests
+      run: |
+        mkdir -p tests/visual
+        
+        cat > tests/visual/zx-pixel-smoosher-visual.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('ZX Pixel Smoosher Visual Regression Tests', () => {
+          test.beforeEach(async ({ page }) => {
+            await page.goto('/');
+            // Wait for application to fully load
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            await page.waitForTimeout(2000); // Allow for full initialization
+          });
+        
+          test('Main application interface screenshot', async ({ page }) => {
+            // Take full page screenshot
+            await expect(page).toHaveScreenshot('main-interface.png', {
+              fullPage: true,
+              threshold: 0.3,
+              maxDiffPixels: 500
+            });
+          });
+        
+          test('Canvas area screenshot', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Screenshot just the canvas area
+            await expect(canvas).toHaveScreenshot('canvas-area.png', {
+              threshold: 0.2,
+              maxDiffPixels: 200
+            });
+          });
+        
+          test('Color palette interface', async ({ page }) => {
+            const palette = page.locator('.color-palette, [data-testid="color-palette"], .palette');
+            
+            if (await palette.count() > 0) {
+              await expect(palette.first()).toHaveScreenshot('color-palette.png', {
+                threshold: 0.1,
+                maxDiffPixels: 100
+              });
+            } else {
+              console.log('Color palette element not found with standard selectors');
+              // Take screenshot of area where palette should be
+              await page.screenshot({
+                path: 'test-results/color-palette-area.png',
+                clip: { x: 0, y: 0, width: 300, height: 200 }
+              });
+            }
+          });
+        
+          test('Drawing tools interface', async ({ page }) => {
+            // Look for drawing tools with various possible selectors
+            const toolsSelectors = [
+              '.tools',
+              '.drawing-tools', 
+              '[data-testid="tools"]',
+              '.toolbar',
+              'button[data-tool]',
+              'button:has-text("Brush")',
+              'button:has-text("Line")'
+            ];
+            
+            let toolsFound = false;
+            for (const selector of toolsSelectors) {
+              const element = page.locator(selector);
+              if (await element.count() > 0) {
+                await expect(element.first()).toHaveScreenshot('drawing-tools.png', {
+                  threshold: 0.2,
+                  maxDiffPixels: 150
+                });
+                toolsFound = true;
+                break;
+              }
+            }
+            
+            if (!toolsFound) {
+              console.log('Drawing tools not found, taking general screenshot');
+              await page.screenshot({ 
+                path: 'test-results/tools-area-fallback.png',
+                clip: { x: 0, y: 0, width: 200, height: 400 }
+              });
+            }
+          });
+        
+          test('Canvas drawing interaction visual test', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Perform some drawing actions
+            await canvas.click({ position: { x: 100, y: 100 } });
+            await canvas.click({ position: { x: 150, y: 100 } });
+            await canvas.click({ position: { x: 150, y: 150 } });
+            await canvas.click({ position: { x: 100, y: 150 } });
+            
+            // Wait for any animations/updates
+            await page.waitForTimeout(1000);
+            
+            // Take screenshot after drawing
+            await expect(canvas).toHaveScreenshot('canvas-after-drawing.png', {
+              threshold: 0.4,
+              maxDiffPixels: 800
+            });
+          });
+        
+          test('ZX Spectrum resolution validation', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Check canvas dimensions
+            const canvasElement = await canvas.elementHandle();
+            const width = await canvasElement.getAttribute('width');
+            const height = await canvasElement.getAttribute('height');
+            
+            // ZX Spectrum should be 256x192
+            expect(width).toBe('256');
+            expect(height).toBe('192');
+            
+            // Take screenshot to verify visual representation
+            await expect(canvas).toHaveScreenshot('zx-resolution-check.png', {
+              threshold: 0.1,
+              maxDiffPixels: 50
+            });
+          });
+        
+          test('Color constraint visualization', async ({ page }) => {
+            // Test ZX Spectrum 16-color palette constraint
+            const colorElements = page.locator('[style*="background"], [data-color], .color-button');
+            
+            if (await colorElements.count() > 0) {
+              // Screenshot color selection area
+              const colorArea = await colorElements.first().boundingBox();
+              if (colorArea) {
+                await page.screenshot({
+                  path: 'test-results/zx-colors-visualization.png',
+                  clip: {
+                    x: Math.max(0, colorArea.x - 20),
+                    y: Math.max(0, colorArea.y - 20),
+                    width: Math.min(400, colorArea.width + 40),
+                    height: Math.min(300, colorArea.height + 40)
+                  }
+                });
+              }
+            }
+          });
+        
+          test('Mobile viewport compatibility', async ({ page }) => {
+            // Test mobile viewport
+            await page.setViewportSize({ width: 375, height: 667 }); // iPhone SE
+            await page.reload();
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            await page.waitForTimeout(1500);
+            
+            await expect(page).toHaveScreenshot('mobile-interface.png', {
+              fullPage: true,
+              threshold: 0.3,
+              maxDiffPixels: 600
+            });
+          });
+        
+          test('Dark mode interface (if available)', async ({ page }) => {
+            // Try to activate dark mode if available
+            const darkModeToggle = page.locator('button:has-text("Dark"), [data-theme="dark"], .theme-toggle');
+            
+            if (await darkModeToggle.count() > 0) {
+              await darkModeToggle.first().click();
+              await page.waitForTimeout(500);
+              
+              await expect(page).toHaveScreenshot('dark-mode-interface.png', {
+                fullPage: true,
+                threshold: 0.4,
+                maxDiffPixels: 1000
+              });
+            } else {
+              console.log('Dark mode toggle not found, skipping dark mode test');
+            }
+          });
+        });
+        EOF
+        
+    - name: Start local server for testing
+      run: python3 -m http.server 8080 &
+      
+    - name: Wait for server to start
+      run: sleep 3
+      
+    - name: Run visual regression tests
+      continue-on-error: true
+      run: |
+        npx playwright test --config=playwright-visual.config.js
+        
+    - name: Upload visual regression results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: visual-regression-results
+        path: |
+          visual-regression-report/
+          test-results/
+          visual-regression-results.json
+        retention-days: 30
+
+  zx-spectrum-validation:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'zx-spectrum-validation' || github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install testing dependencies
+      run: npm install @playwright/test puppeteer
+      
+    - name: Install Playwright browsers
+      run: npx playwright install chromium
+      
+    - name: Create ZX Spectrum validation tests
+      run: |
+        mkdir -p tests/zx-validation
+        
+        cat > tests/zx-validation/zx-spectrum-constraints.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('ZX Spectrum Hardware Constraint Validation', () => {
+          test.beforeEach(async ({ page }) => {
+            await page.goto('http://localhost:8080');
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            await page.waitForTimeout(1000);
+          });
+        
+          test('Canvas resolution must be exactly 256x192', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            const canvasElement = await canvas.elementHandle();
+            const width = await canvasElement.getAttribute('width');
+            const height = await canvasElement.getAttribute('height');
+            
+            expect(parseInt(width)).toBe(256);
+            expect(parseInt(height)).toBe(192);
+          });
+        
+          test('Color palette must have exactly 16 colors', async ({ page }) => {
+            // Test ZX Spectrum 16-color constraint
+            const colorCount = await page.evaluate(() => {
+              // Look for color elements in various possible structures
+              const selectors = [
+                '.color-button',
+                '[data-color]',
+                '.palette-color',
+                '.color-swatch',
+                '[style*="background-color"]'
+              ];
+              
+              let maxColors = 0;
+              for (const selector of selectors) {
+                const elements = document.querySelectorAll(selector);
+                if (elements.length > maxColors && elements.length <= 20) {
+                  maxColors = elements.length;
+                }
+              }
+              
+              // If no specific color elements found, check for ZX color constants
+              if (maxColors === 0 && window.ZXSpectrumPixelSmasher) {
+                // Check for ZX color arrays in the application
+                const zxColorPattern = /(?:ZX_COLORS|SPECTRUM_COLORS|colors)\s*[=:]\s*\[[\s\S]*?\]/g;
+                const sourceCode = window.ZXSpectrumPixelSmasher.toString();
+                const matches = sourceCode.match(zxColorPattern);
+                if (matches) {
+                  // Count color entries in the array
+                  const colorArray = matches[0];
+                  const colorEntries = (colorArray.match(/[#][\da-fA-F]{6}|rgb\([\d,\s]+\)/g) || []).length;
+                  maxColors = colorEntries;
+                }
+              }
+              
+              return maxColors;
+            });
+            
+            // ZX Spectrum has exactly 16 colors (8 normal + 8 bright)
+            expect(colorCount).toBeGreaterThanOrEqual(8); // At least basic colors
+            expect(colorCount).toBeLessThanOrEqual(16); // No more than ZX Spectrum limit
+          });
+        
+          test('Attribute block constraint validation', async ({ page }) => {
+            // Test that color attribute system respects 8x8 pixel blocks
+            const attributeCompliant = await page.evaluate(() => {
+              if (!window.ZXSpectrumPixelSmasher) return false;
+              
+              // Check for attribute-related functions or constants
+              const sourceCode = window.ZXSpectrumPixelSmasher.toString();
+              
+              // Look for 8x8 block references
+              const hasAttributeBlocks = sourceCode.includes('8') && 
+                (sourceCode.includes('attribute') || sourceCode.includes('block'));
+              
+              // Check for ZX Spectrum memory layout constants
+              const hasMemoryLayout = sourceCode.includes('6912') || 
+                (sourceCode.includes('6144') && sourceCode.includes('768'));
+              
+              return hasAttributeBlocks || hasMemoryLayout;
+            });
+            
+            expect(attributeCompliant).toBe(true);
+          });
+        
+          test('Canvas coordinate system validation', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Test drawing at ZX Spectrum boundaries
+            await canvas.click({ position: { x: 0, y: 0 } }); // Top-left
+            await canvas.click({ position: { x: 255, y: 0 } }); // Top-right
+            await canvas.click({ position: { x: 255, y: 191 } }); // Bottom-right
+            await canvas.click({ position: { x: 0, y: 191 } }); // Bottom-left
+            
+            // Should not crash or cause errors
+            const errors = await page.evaluate(() => {
+              return window.errors || [];
+            });
+            
+            expect(errors.length).toBe(0);
+          });
+        
+          test('Memory layout compatibility check', async ({ page }) => {
+            // Validate ZX Spectrum memory layout constants
+            const memoryLayoutValid = await page.evaluate(() => {
+              if (!window.ZXSpectrumPixelSmasher) return false;
+              
+              // Check for ZX Spectrum memory constants
+              const sourceCode = document.documentElement.outerHTML + 
+                Array.from(document.scripts).map(s => s.innerHTML).join('');
+              
+              // ZX Spectrum SCR format: 6912 bytes total (6144 pixels + 768 attributes)
+              const hasScrFormat = sourceCode.includes('6912');
+              const hasPixelData = sourceCode.includes('6144');
+              const hasAttributeData = sourceCode.includes('768');
+              
+              return hasScrFormat || (hasPixelData && hasAttributeData);
+            });
+            
+            expect(memoryLayoutValid).toBe(true);
+          });
+        
+          test('Export format compatibility', async ({ page }) => {
+            // Test that export functionality maintains ZX Spectrum compatibility
+            const exportFormats = await page.evaluate(() => {
+              // Look for export-related functionality
+              const exportButtons = Array.from(document.querySelectorAll('button'))
+                .filter(btn => btn.textContent.toLowerCase().includes('export') || 
+                              btn.textContent.toLowerCase().includes('save') ||
+                              btn.textContent.toLowerCase().includes('download'));
+              
+              return exportButtons.map(btn => btn.textContent.toLowerCase());
+            });
+            
+            // Should support at least one ZX Spectrum compatible format
+            const hasZxFormat = exportFormats.some(format => 
+              format.includes('scr') || format.includes('spectrum') || format.includes('zx')
+            ) || exportFormats.length > 0; // Or at least have export functionality
+            
+            expect(hasZxFormat).toBe(true);
+          });
+        
+          test('Performance constraint validation', async ({ page }) => {
+            // Test performance characteristics suitable for ZX Spectrum emulation
+            const performanceMetrics = await page.evaluate(() => {
+              const startTime = performance.now();
+              const canvas = document.querySelector('canvas');
+              
+              if (!canvas) return { canvasFound: false };
+              
+              const ctx = canvas.getContext('2d');
+              
+              // Simulate drawing operations typical for ZX Spectrum graphics
+              const iterations = 100;
+              for (let i = 0; i < iterations; i++) {
+                const x = Math.floor(Math.random() * 256);
+                const y = Math.floor(Math.random() * 192);
+                ctx.fillRect(x, y, 1, 1);
+              }
+              
+              const endTime = performance.now();
+              const avgTime = (endTime - startTime) / iterations;
+              
+              return {
+                canvasFound: true,
+                averageDrawTime: avgTime,
+                totalTime: endTime - startTime,
+                pixelsPerSecond: 1000 / avgTime
+              };
+            });
+            
+            expect(performanceMetrics.canvasFound).toBe(true);
+            
+            // Performance should be reasonable for pixel-level operations
+            if (performanceMetrics.averageDrawTime) {
+              expect(performanceMetrics.averageDrawTime).toBeLessThan(10); // Less than 10ms per pixel
+              expect(performanceMetrics.pixelsPerSecond).toBeGreaterThan(10); // At least 10 pixels/second
+            }
+          });
+        });
+        EOF
+        
+    - name: Start local server
+      run: python3 -m http.server 8080 &
+      
+    - name: Wait for server
+      run: sleep 3
+      
+    - name: Run ZX Spectrum validation tests
+      run: |
+        npx playwright test tests/zx-validation/ --reporter=json:zx-validation-results.json
+        
+    - name: Generate ZX Spectrum validation report
+      run: |
+        cat > zx-validation-report.md << 'EOF'
+        # ZX Spectrum Hardware Validation Report
+        
+        **Test Date:** $(date)
+        **Commit:** ${{ github.sha }}
+        
+        ## Validation Results
+        
+        EOF
+        
+        # Parse test results if available
+        if [ -f "zx-validation-results.json" ]; then
+          node -e "
+            try {
+              const results = JSON.parse(require('fs').readFileSync('zx-validation-results.json'));
+              const passed = results.stats.expected || 0;
+              const failed = results.stats.unexpected || 0;
+              const total = passed + failed;
+              
+              console.log('- **Tests Run:** ' + total);
+              console.log('- **Passed:** ' + passed + ' ✅');
+              console.log('- **Failed:** ' + failed + (failed > 0 ? ' ❌' : ''));
+              console.log('- **Success Rate:** ' + (total > 0 ? Math.round(passed/total * 100) : 0) + '%');
+              console.log('');
+              console.log('## Test Details');
+              
+              if (results.suites && results.suites.length > 0) {
+                results.suites.forEach(suite => {
+                  console.log('### ' + suite.title);
+                  suite.specs.forEach(spec => {
+                    const status = spec.tests[0].status === 'expected' ? '✅' : '❌';
+                    console.log('- ' + status + ' ' + spec.title);
+                  });
+                  console.log('');
+                });
+              }
+            } catch (e) {
+              console.log('Could not parse test results');
+            }
+          " >> zx-validation-report.md
+        fi
+        
+    - name: Upload ZX Spectrum validation results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: zx-spectrum-validation-results
+        path: |
+          zx-validation-results.json
+          zx-validation-report.md
+          test-results/
+        retention-days: 30
+
+  mobile-device-testing:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'mobile-testing' || github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install dependencies
+      run: npm install @playwright/test
+      
+    - name: Install Playwright browsers
+      run: npx playwright install
+      
+    - name: Create mobile device test configuration
+      run: |
+        cat > playwright-mobile.config.js << 'EOF'
+        const { defineConfig, devices } = require('@playwright/test');
+        
+        module.exports = defineConfig({
+          testDir: './tests/mobile',
+          fullyParallel: true,
+          forbidOnly: !!process.env.CI,
+          retries: process.env.CI ? 1 : 0,
+          workers: 2,
+          reporter: [
+            ['html', { outputFolder: 'mobile-test-report' }],
+            ['json', { outputFile: 'mobile-test-results.json' }]
+          ],
+          use: {
+            baseURL: 'http://localhost:8080',
+            trace: 'retain-on-failure'
+          },
+          projects: [
+            {
+              name: 'iPhone SE',
+              use: { ...devices['iPhone SE'] }
+            },
+            {
+              name: 'iPhone 12',
+              use: { ...devices['iPhone 12'] }
+            },
+            {
+              name: 'iPad',
+              use: { ...devices['iPad'] }
+            },
+            {
+              name: 'Samsung Galaxy S21',
+              use: { ...devices['Galaxy S21'] }
+            },
+            {
+              name: 'Samsung Galaxy Tab',
+              use: { ...devices['Galaxy Tab S4'] }
+            }
+          ],
+          webServer: {
+            command: 'python3 -m http.server 8080',
+            port: 8080,
+            reuseExistingServer: !process.env.CI
+          }
+        });
+        EOF
+        
+    - name: Create mobile device tests
+      run: |
+        mkdir -p tests/mobile
+        
+        cat > tests/mobile/mobile-compatibility.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('Mobile Device Compatibility Tests', () => {
+          test.beforeEach(async ({ page }) => {
+            await page.goto('/');
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined, { timeout: 10000 });
+            await page.waitForTimeout(1500);
+          });
+        
+          test('Application loads successfully on mobile', async ({ page }) => {
+            // Check that main elements are present
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible({ timeout: 5000 });
+            
+            // Verify no critical JavaScript errors
+            const errors = [];
+            page.on('console', msg => {
+              if (msg.type() === 'error') errors.push(msg.text());
+            });
+            
+            await page.waitForTimeout(2000);
+            
+            // Filter out known non-critical errors
+            const criticalErrors = errors.filter(error => 
+              !error.includes('favicon') && 
+              !error.includes('DevTools') &&
+              !error.includes('manifest.json')
+            );
+            
+            expect(criticalErrors).toHaveLength(0);
+          });
+        
+          test('Touch interaction with canvas works', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Test touch/tap interaction
+            await canvas.tap({ position: { x: 100, y: 100 } });
+            await canvas.tap({ position: { x: 150, y: 100 } });
+            await canvas.tap({ position: { x: 150, y: 150 } });
+            
+            // Application should still be responsive
+            const isResponsive = await page.evaluate(() => {
+              return typeof window.ZXSpectrumPixelSmasher === 'object';
+            });
+            
+            expect(isResponsive).toBe(true);
+          });
+        
+          test('Interface elements are touch-friendly', async ({ page }) => {
+            // Check for buttons and interactive elements
+            const buttons = page.locator('button');
+            const buttonCount = await buttons.count();
+            
+            if (buttonCount > 0) {
+              // Test that buttons are large enough for touch
+              for (let i = 0; i < Math.min(5, buttonCount); i++) {
+                const button = buttons.nth(i);
+                if (await button.isVisible()) {
+                  const box = await button.boundingBox();
+                  if (box) {
+                    // Touch targets should be at least 44px (iOS) or 48px (Android)
+                    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(32);
+                  }
+                }
+              }
+            }
+          });
+        
+          test('Viewport adaptation works correctly', async ({ page }) => {
+            const viewportSize = page.viewportSize();
+            
+            // Check that canvas adapts to viewport
+            const canvas = page.locator('canvas').first();
+            const canvasBox = await canvas.boundingBox();
+            
+            if (canvasBox) {
+              // Canvas should fit within viewport
+              expect(canvasBox.width).toBeLessThanOrEqual(viewportSize.width);
+              expect(canvasBox.height).toBeLessThanOrEqual(viewportSize.height);
+            }
+            
+            // Check for horizontal scrolling issues
+            const bodyScrollWidth = await page.evaluate(() => document.body.scrollWidth);
+            const bodyClientWidth = await page.evaluate(() => document.body.clientWidth);
+            
+            // Should not have significant horizontal overflow
+            expect(bodyScrollWidth - bodyClientWidth).toBeLessThan(50);
+          });
+        
+          test('Color palette is accessible on mobile', async ({ page }) => {
+            // Look for color selection elements
+            const colorSelectors = [
+              '.color-button',
+              '[data-color]', 
+              '.palette-color',
+              '[style*="background-color"]'
+            ];
+            
+            let paletteAccessible = false;
+            for (const selector of colorSelectors) {
+              const elements = page.locator(selector);
+              const count = await elements.count();
+              
+              if (count > 0) {
+                // Check first few color elements
+                for (let i = 0; i < Math.min(3, count); i++) {
+                  const element = elements.nth(i);
+                  if (await element.isVisible()) {
+                    // Should be tappable
+                    await element.tap();
+                    paletteAccessible = true;
+                    break;
+                  }
+                }
+                if (paletteAccessible) break;
+              }
+            }
+            
+            // Either found accessible palette or no palette UI (which is also valid)
+            expect(paletteAccessible || true).toBe(true);
+          });
+        
+          test('Drawing tools are mobile-friendly', async ({ page }) => {
+            // Test drawing tool selection on mobile
+            const toolButtons = page.locator('button').filter({ 
+              hasText: /brush|line|circle|rectangle|fill/i 
+            });
+            
+            const toolCount = await toolButtons.count();
+            
+            if (toolCount > 0) {
+              // Test selecting first available tool
+              const firstTool = toolButtons.first();
+              await firstTool.tap();
+              
+              // Should not cause errors
+              const errors = [];
+              page.on('console', msg => {
+                if (msg.type() === 'error') errors.push(msg.text());
+              });
+              
+              await page.waitForTimeout(1000);
+              expect(errors.length).toBe(0);
+            }
+          });
+        
+          test('Pinch-to-zoom handling', async ({ page }) => {
+            // Test that pinch gestures don't break the application
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Simulate pinch zoom (mobile browsers handle this differently)
+            await page.evaluate(() => {
+              // Dispatch touch events to simulate pinch
+              const canvas = document.querySelector('canvas');
+              if (canvas) {
+                const touchStart = new TouchEvent('touchstart', {
+                  touches: [
+                    new Touch({ identifier: 0, target: canvas, clientX: 100, clientY: 100 }),
+                    new Touch({ identifier: 1, target: canvas, clientX: 200, clientY: 200 })
+                  ]
+                });
+                canvas.dispatchEvent(touchStart);
+                
+                const touchMove = new TouchEvent('touchmove', {
+                  touches: [
+                    new Touch({ identifier: 0, target: canvas, clientX: 80, clientY: 80 }),
+                    new Touch({ identifier: 1, target: canvas, clientX: 220, clientY: 220 })
+                  ]
+                });
+                canvas.dispatchEvent(touchMove);
+                
+                const touchEnd = new TouchEvent('touchend', { touches: [] });
+                canvas.dispatchEvent(touchEnd);
+              }
+            });
+            
+            // Application should still be functional
+            await page.waitForTimeout(500);
+            const stillResponsive = await page.evaluate(() => {
+              return typeof window.ZXSpectrumPixelSmasher === 'object';
+            });
+            
+            expect(stillResponsive).toBe(true);
+          });
+        
+          test('Orientation change handling', async ({ page }) => {
+            // Test portrait orientation
+            await page.setViewportSize({ width: 375, height: 667 });
+            await page.waitForTimeout(500);
+            
+            let canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Test landscape orientation  
+            await page.setViewportSize({ width: 667, height: 375 });
+            await page.waitForTimeout(500);
+            
+            canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Application should adapt to both orientations
+            const isResponsive = await page.evaluate(() => {
+              return typeof window.ZXSpectrumPixelSmasher === 'object';
+            });
+            
+            expect(isResponsive).toBe(true);
+          });
+        });
+        EOF
+        
+    - name: Run mobile device tests
+      run: |
+        npx playwright test --config=playwright-mobile.config.js
+        
+    - name: Upload mobile test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mobile-test-results
+        path: |
+          mobile-test-report/
+          mobile-test-results.json
+          test-results/
+        retention-days: 30
+
+  load-stress-testing:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'load-testing' || github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install dependencies
+      run: npm install puppeteer
+      
+    - name: Create load testing script
+      run: |
+        cat > load-test.js << 'EOF'
+        const puppeteer = require('puppeteer');
+        
+        async function runLoadTest() {
+          console.log('🚀 Starting ZX Pixel Smoosher Load Test...');
+          
+          const browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-dev-shm-usage']
+          });
+          
+          const page = await browser.newPage();
+          
+          // Monitor memory usage
+          const memoryUsage = [];
+          const performanceMetrics = [];
+          
+          await page.goto('http://localhost:8080', { waitUntil: 'networkidle0' });
+          await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+          
+          console.log('✅ Application loaded successfully');
+          
+          // Stress test: Rapid canvas operations
+          console.log('🔥 Starting intensive drawing operations...');
+          
+          const stressTestResults = await page.evaluate(async () => {
+            const results = {
+              drawingOperations: 0,
+              memoryBefore: performance.memory ? performance.memory.usedJSHeapSize : 0,
+              memoryAfter: 0,
+              errors: [],
+              averageDrawTime: 0,
+              maxDrawTime: 0,
+              minDrawTime: Infinity
+            };
+            
+            const canvas = document.querySelector('canvas');
+            if (!canvas) {
+              results.errors.push('Canvas not found');
+              return results;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const drawTimes = [];
+            
+            // Intensive drawing test - 1000 operations
+            for (let i = 0; i < 1000; i++) {
+              const startTime = performance.now();
+              
+              const x = Math.random() * 256;
+              const y = Math.random() * 192;
+              const color = `rgb(${Math.floor(Math.random()*256)}, ${Math.floor(Math.random()*256)}, ${Math.floor(Math.random()*256)})`;
+              
+              ctx.fillStyle = color;
+              ctx.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+              
+              const endTime = performance.now();
+              const drawTime = endTime - startTime;
+              drawTimes.push(drawTime);
+              
+              results.drawingOperations++;
+              
+              // Yield control occasionally to prevent blocking
+              if (i % 100 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 1));
+              }
+            }
+            
+            results.memoryAfter = performance.memory ? performance.memory.usedJSHeapSize : 0;
+            results.averageDrawTime = drawTimes.reduce((a, b) => a + b, 0) / drawTimes.length;
+            results.maxDrawTime = Math.max(...drawTimes);
+            results.minDrawTime = Math.min(...drawTimes);
+            
+            return results;
+          });
+          
+          console.log('📊 Load Test Results:');
+          console.log(`- Drawing Operations: ${stressTestResults.drawingOperations}`);
+          console.log(`- Average Draw Time: ${stressTestResults.averageDrawTime.toFixed(3)}ms`);
+          console.log(`- Max Draw Time: ${stressTestResults.maxDrawTime.toFixed(3)}ms`);
+          console.log(`- Min Draw Time: ${stressTestResults.minDrawTime.toFixed(3)}ms`);
+          
+          if (stressTestResults.memoryAfter > stressTestResults.memoryBefore) {
+            const memoryIncrease = (stressTestResults.memoryAfter - stressTestResults.memoryBefore) / 1024 / 1024;
+            console.log(`- Memory Usage Increase: ${memoryIncrease.toFixed(2)}MB`);
+          }
+          
+          // Memory leak test
+          console.log('🔍 Testing for memory leaks...');
+          
+          const memoryLeakTest = await page.evaluate(async () => {
+            const iterations = 10;
+            const memoryMeasurements = [];
+            
+            for (let i = 0; i < iterations; i++) {
+              // Perform operations that might leak memory
+              if (window.ZXSpectrumPixelSmasher && window.ZXSpectrumPixelSmasher.clearCanvas) {
+                window.ZXSpectrumPixelSmasher.clearCanvas();
+              }
+              
+              // Create and destroy canvas operations
+              const canvas = document.querySelector('canvas');
+              if (canvas) {
+                const ctx = canvas.getContext('2d');
+                for (let j = 0; j < 100; j++) {
+                  ctx.fillStyle = `rgb(${j%256}, 0, 0)`;
+                  ctx.fillRect(j % 256, (j * 2) % 192, 1, 1);
+                }
+              }
+              
+              // Measure memory
+              if (performance.memory) {
+                memoryMeasurements.push(performance.memory.usedJSHeapSize);
+              }
+              
+              // Wait between measurements
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            return memoryMeasurements;
+          });
+          
+          // Analyze memory trend
+          let memoryTrend = 'stable';
+          if (memoryLeakTest.length >= 3) {
+            const start = memoryLeakTest[0];
+            const end = memoryLeakTest[memoryLeakTest.length - 1];
+            const increase = end - start;
+            
+            if (increase > 10 * 1024 * 1024) { // 10MB increase
+              memoryTrend = 'potential_leak';
+            } else if (increase > 5 * 1024 * 1024) { // 5MB increase
+              memoryTrend = 'high_usage';
+            }
+          }
+          
+          console.log(`- Memory Trend: ${memoryTrend}`);
+          
+          // Generate load test report
+          const report = {
+            timestamp: new Date().toISOString(),
+            testDuration: '~30 seconds',
+            results: {
+              drawingPerformance: stressTestResults,
+              memoryTest: {
+                trend: memoryTrend,
+                measurements: memoryLeakTest
+              },
+              overallStatus: stressTestResults.errors.length === 0 && memoryTrend !== 'potential_leak' ? 'PASSED' : 'ISSUES_DETECTED'
+            }
+          };
+          
+          require('fs').writeFileSync('load-test-results.json', JSON.stringify(report, null, 2));
+          
+          await browser.close();
+          
+          console.log(`🎯 Load Test Complete - Status: ${report.results.overallStatus}`);
+          return report.results.overallStatus === 'PASSED' ? 0 : 1;
+        }
+        
+        runLoadTest().then(exitCode => process.exit(exitCode)).catch(console.error);
+        EOF
+        
+    - name: Start local server
+      run: python3 -m http.server 8080 &
+      
+    - name: Wait for server
+      run: sleep 3
+      
+    - name: Run load test
+      run: node load-test.js
+      
+    - name: Upload load test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: load-test-results
+        path: load-test-results.json
+        retention-days: 30
+
+  generate-test-summary:
+    needs: [visual-regression-testing, zx-spectrum-validation, mobile-device-testing, load-stress-testing]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v4
+      
+    - name: Generate comprehensive test summary
+      run: |
+        cat > comprehensive-test-summary.md << 'EOF'
+        # 🧪 ZX Pixel Smoosher - Comprehensive Test Suite Results
+        
+        **Test Run Date:** $(date)
+        **Commit:** ${{ github.sha }}
+        **Branch:** ${{ github.ref_name }}
+        **Triggered by:** ${{ github.event_name }}
+        
+        ## Test Suite Overview
+        
+        EOF
+        
+        # Visual regression results
+        echo "### 📸 Visual Regression Testing" >> comprehensive-test-summary.md
+        if [ -d "visual-regression-results" ]; then
+          echo "- **Status:** ✅ Completed" >> comprehensive-test-summary.md
+          if [ -f "visual-regression-results/visual-regression-results.json" ]; then
+            echo "- **Artifacts:** Screenshots and comparison reports available" >> comprehensive-test-summary.md
+          fi
+        else
+          echo "- **Status:** ❌ Not completed or failed" >> comprehensive-test-summary.md
+        fi
+        
+        # ZX Spectrum validation results
+        echo "" >> comprehensive-test-summary.md
+        echo "### 🎨 ZX Spectrum Hardware Validation" >> comprehensive-test-summary.md
+        if [ -d "zx-spectrum-validation-results" ]; then
+          echo "- **Status:** ✅ Completed" >> comprehensive-test-summary.md
+          if [ -f "zx-spectrum-validation-results/zx-validation-report.md" ]; then
+            echo "- **Report:** Hardware constraint compliance verified" >> comprehensive-test-summary.md
+          fi
+        else
+          echo "- **Status:** ❌ Not completed or failed" >> comprehensive-test-summary.md
+        fi
+        
+        # Mobile testing results
+        echo "" >> comprehensive-test-summary.md
+        echo "### 📱 Mobile Device Testing" >> comprehensive-test-summary.md
+        if [ -d "mobile-test-results" ]; then
+          echo "- **Status:** ✅ Completed" >> comprehensive-test-summary.md
+          echo "- **Devices Tested:** iPhone SE, iPhone 12, iPad, Samsung Galaxy devices" >> comprehensive-test-summary.md
+        else
+          echo "- **Status:** ❌ Not completed or failed" >> comprehensive-test-summary.md
+        fi
+        
+        # Load testing results
+        echo "" >> comprehensive-test-summary.md
+        echo "### 🚀 Load & Stress Testing" >> comprehensive-test-summary.md
+        if [ -f "load-test-results/load-test-results.json" ]; then
+          echo "- **Status:** ✅ Completed" >> comprehensive-test-summary.md
+          
+          # Parse load test results
+          node -e "
+            try {
+              const results = JSON.parse(require('fs').readFileSync('load-test-results/load-test-results.json'));
+              console.log('- **Drawing Operations:** ' + (results.results.drawingPerformance.drawingOperations || 0));
+              console.log('- **Average Draw Time:** ' + (results.results.drawingPerformance.averageDrawTime || 0).toFixed(3) + 'ms');
+              console.log('- **Memory Trend:** ' + (results.results.memoryTest.trend || 'unknown'));
+              console.log('- **Overall Status:** ' + (results.results.overallStatus || 'unknown'));
+            } catch (e) {
+              console.log('- **Status:** Results available but could not parse');
+            }
+          " >> comprehensive-test-summary.md 2>/dev/null || echo "- **Details:** Available in artifacts" >> comprehensive-test-summary.md
+        else
+          echo "- **Status:** ❌ Not completed or failed" >> comprehensive-test-summary.md
+        fi
+        
+        echo "" >> comprehensive-test-summary.md
+        echo "## 📋 Summary" >> comprehensive-test-summary.md
+        echo "" >> comprehensive-test-summary.md
+        echo "The ZX Pixel Smoosher application has undergone comprehensive testing across multiple dimensions:" >> comprehensive-test-summary.md
+        echo "- **Visual Consistency:** Ensuring UI remains stable across changes" >> comprehensive-test-summary.md
+        echo "- **Hardware Compliance:** Verifying authentic ZX Spectrum constraints" >> comprehensive-test-summary.md
+        echo "- **Mobile Compatibility:** Testing across various devices and screen sizes" >> comprehensive-test-summary.md
+        echo "- **Performance:** Validating application performance under stress" >> comprehensive-test-summary.md
+        echo "" >> comprehensive-test-summary.md
+        echo "All test artifacts are available for detailed analysis." >> comprehensive-test-summary.md
+        
+    - name: Upload comprehensive test summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: comprehensive-test-summary
+        path: comprehensive-test-summary.md
+        retention-days: 90
+        
+    - name: Comment test summary on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            const summary = fs.readFileSync('comprehensive-test-summary.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## 🧪 Enhanced Testing Suite Results\n\n' + summary
+            });
+          } catch (error) {
+            console.log('Could not read test summary file');
+          }

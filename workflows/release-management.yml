@@ -1,0 +1,480 @@
+name: Release Management & Versioning
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Type of release'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      prerelease_tag:
+        description: 'Prerelease tag (e.g., alpha, beta, rc)'
+        required: false
+        default: 'alpha'
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  analyze-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.changes.outputs.should_release }}
+      release_type: ${{ steps.changes.outputs.release_type }}
+      version_bump: ${{ steps.changes.outputs.version_bump }}
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Analyze commit messages for release type
+      id: changes
+      run: |
+        # Get commits since last release
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        if [ -z "$LAST_TAG" ]; then
+          echo "No previous tags found, treating as initial release"
+          COMMITS=$(git log --pretty=format:"%s" --no-merges)
+        else
+          echo "Analyzing commits since $LAST_TAG"
+          COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+        fi
+        
+        echo "Recent commits:"
+        echo "$COMMITS"
+        
+        # Analyze commit messages for conventional commits
+        BREAKING_CHANGES=$(echo "$COMMITS" | grep -i "BREAKING CHANGE\|!" | wc -l)
+        FEATURES=$(echo "$COMMITS" | grep -i "^feat\|^feature" | wc -l)
+        FIXES=$(echo "$COMMITS" | grep -i "^fix\|^bugfix" | wc -l)
+        DOCS=$(echo "$COMMITS" | grep -i "^docs\|^doc" | wc -l)
+        CHORES=$(echo "$COMMITS" | grep -i "^chore\|^style\|^refactor" | wc -l)
+        
+        echo "Analysis results:"
+        echo "- Breaking changes: $BREAKING_CHANGES"
+        echo "- New features: $FEATURES" 
+        echo "- Bug fixes: $FIXES"
+        echo "- Documentation: $DOCS"
+        echo "- Chores/Style: $CHORES"
+        
+        # Determine release type
+        if [ "$BREAKING_CHANGES" -gt 0 ]; then
+          RELEASE_TYPE="major"
+        elif [ "$FEATURES" -gt 0 ]; then
+          RELEASE_TYPE="minor"
+        elif [ "$FIXES" -gt 0 ]; then
+          RELEASE_TYPE="patch"
+        else
+          RELEASE_TYPE="none"
+        fi
+        
+        # Override with manual input if provided
+        if [ "${{ github.event.inputs.release_type }}" != "" ]; then
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+        fi
+        
+        # Determine if we should release
+        if [ "$RELEASE_TYPE" != "none" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          SHOULD_RELEASE="true"
+        else
+          SHOULD_RELEASE="false"
+        fi
+        
+        echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+        echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+        echo "version_bump=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+        
+        echo "Decision: Release=$SHOULD_RELEASE, Type=$RELEASE_TYPE"
+
+  create-release:
+    needs: analyze-changes
+    if: needs.analyze-changes.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Setup Git user
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+    - name: Get current version
+      id: current_version
+      run: |
+        # Try to get version from package.json in assets folder
+        if [ -f "assets/package.json" ]; then
+          CURRENT_VERSION=$(node -p "require('./assets/package.json').version" 2>/dev/null || echo "0.0.0")
+        else
+          # Fallback to git tags
+          CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+        fi
+        
+        echo "Current version: $CURRENT_VERSION"
+        echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        
+    - name: Calculate new version
+      id: version
+      run: |
+        CURRENT="${{ steps.current_version.outputs.current_version }}"
+        RELEASE_TYPE="${{ needs.analyze-changes.outputs.release_type }}"
+        
+        # Parse current version
+        IFS='.' read -ra VERSION_PARTS <<< "$CURRENT"
+        MAJOR=${VERSION_PARTS[0]:-0}
+        MINOR=${VERSION_PARTS[1]:-0}
+        PATCH=${VERSION_PARTS[2]:-0}
+        
+        echo "Current version parts: Major=$MAJOR, Minor=$MINOR, Patch=$PATCH"
+        
+        # Calculate new version based on release type
+        case $RELEASE_TYPE in
+          major)
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_MINOR=0
+            NEW_PATCH=0
+            ;;
+          minor)
+            NEW_MAJOR=$MAJOR
+            NEW_MINOR=$((MINOR + 1))
+            NEW_PATCH=0
+            ;;
+          patch)
+            NEW_MAJOR=$MAJOR
+            NEW_MINOR=$MINOR
+            NEW_PATCH=$((PATCH + 1))
+            ;;
+          prerelease)
+            NEW_MAJOR=$MAJOR
+            NEW_MINOR=$MINOR
+            NEW_PATCH=$((PATCH + 1))
+            PRERELEASE_TAG="${{ github.event.inputs.prerelease_tag }}"
+            TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+            ;;
+        esac
+        
+        if [ "$RELEASE_TYPE" = "prerelease" ]; then
+          NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}-${PRERELEASE_TAG}.${TIMESTAMP}"
+        else
+          NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+        fi
+        
+        echo "New version: $NEW_VERSION"
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        
+    - name: Update package.json version
+      run: |
+        NEW_VERSION="${{ steps.version.outputs.new_version }}"
+        
+        # Update version in assets/package.json if it exists
+        if [ -f "assets/package.json" ]; then
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('assets/package.json', 'utf8'));
+            pkg.version = '$NEW_VERSION';
+            fs.writeFileSync('assets/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "Updated version in assets/package.json to $NEW_VERSION"
+        fi
+        
+        # Update version in main HTML file
+        sed -i "s/Version [0-9]\+\.[0-9]\+\.[0-9]\+/Version $NEW_VERSION/g" index.html 2>/dev/null || true
+        
+    - name: Generate comprehensive changelog
+      id: changelog
+      run: |
+        NEW_VERSION="${{ steps.version.outputs.new_version }}"
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        echo "# ZX Pixel Smoosher v$NEW_VERSION" > CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        echo "**Release Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> CHANGELOG_TEMP.md
+        echo "**Release Type:** ${{ needs.analyze-changes.outputs.release_type }}" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        if [ -n "$LAST_TAG" ]; then
+          echo "## Changes since $LAST_TAG" >> CHANGELOG_TEMP.md
+          echo "" >> CHANGELOG_TEMP.md
+          
+          # Get commits since last tag
+          COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges)
+        else
+          echo "## Initial Release" >> CHANGELOG_TEMP.md
+          echo "" >> CHANGELOG_TEMP.md
+          
+          # Get all commits for initial release
+          COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges | head -20)
+        fi
+        
+        # Categorize commits
+        echo "### 🚀 New Features" >> CHANGELOG_TEMP.md
+        echo "$COMMITS" | grep -i "^- feat\|^- feature\|^- add" >> CHANGELOG_TEMP.md || echo "_No new features in this release_" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        echo "### 🐛 Bug Fixes" >> CHANGELOG_TEMP.md
+        echo "$COMMITS" | grep -i "^- fix\|^- bugfix\|^- resolve" >> CHANGELOG_TEMP.md || echo "_No bug fixes in this release_" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        echo "### 📚 Documentation" >> CHANGELOG_TEMP.md
+        echo "$COMMITS" | grep -i "^- docs\|^- doc\|^- readme" >> CHANGELOG_TEMP.md || echo "_No documentation changes in this release_" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        echo "### 🔧 Maintenance" >> CHANGELOG_TEMP.md
+        echo "$COMMITS" | grep -i "^- chore\|^- style\|^- refactor\|^- update" >> CHANGELOG_TEMP.md || echo "_No maintenance changes in this release_" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        # Add ZX Pixel Smoosher specific sections
+        echo "### 🎨 ZX Spectrum Features" >> CHANGELOG_TEMP.md
+        echo "$COMMITS" | grep -i "zx\|spectrum\|color\|palette\|pixel\|canvas\|draw" >> CHANGELOG_TEMP.md || echo "_No ZX Spectrum specific changes in this release_" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        echo "### ⚡ Performance Improvements" >> CHANGELOG_TEMP.md
+        echo "$COMMITS" | grep -i "performance\|speed\|optimize\|memory\|cache" >> CHANGELOG_TEMP.md || echo "_No performance improvements in this release_" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        
+        # Add technical details
+        echo "### 📊 Technical Details" >> CHANGELOG_TEMP.md
+        echo "- **Commit Range:** ${LAST_TAG}..HEAD" >> CHANGELOG_TEMP.md
+        echo "- **Total Commits:** $(echo "$COMMITS" | wc -l)" >> CHANGELOG_TEMP.md
+        echo "- **Contributors:** $(git log ${LAST_TAG}..HEAD --pretty=format:"%an" | sort -u | wc -l)" >> CHANGELOG_TEMP.md
+        
+        # Calculate file changes
+        if [ -n "$LAST_TAG" ]; then
+          FILES_CHANGED=$(git diff --name-only ${LAST_TAG}..HEAD | wc -l)
+          LINES_ADDED=$(git diff --stat ${LAST_TAG}..HEAD | tail -1 | grep -o '[0-9]* insertion' | cut -d' ' -f1 || echo "0")
+          LINES_DELETED=$(git diff --stat ${LAST_TAG}..HEAD | tail -1 | grep -o '[0-9]* deletion' | cut -d' ' -f1 || echo "0")
+          
+          echo "- **Files Changed:** $FILES_CHANGED" >> CHANGELOG_TEMP.md
+          echo "- **Lines Added:** ${LINES_ADDED:-0}" >> CHANGELOG_TEMP.md  
+          echo "- **Lines Deleted:** ${LINES_DELETED:-0}" >> CHANGELOG_TEMP.md
+        fi
+        
+        echo "" >> CHANGELOG_TEMP.md
+        echo "---" >> CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        echo "**Full Changelog:** https://github.com/${{ github.repository }}/compare/${LAST_TAG}...v$NEW_VERSION" >> CHANGELOG_TEMP.md
+        
+        # Set output for GitHub Actions
+        {
+          echo 'changelog<<EOF'
+          cat CHANGELOG_TEMP.md
+          echo 'EOF'
+        } >> $GITHUB_OUTPUT
+        
+    - name: Create release assets
+      run: |
+        NEW_VERSION="${{ steps.version.outputs.new_version }}"
+        mkdir -p release-assets
+        
+        # Create distributable ZIP
+        echo "Creating ZX Pixel Smoosher distribution package..."
+        zip -r "release-assets/zx-pixel-smoosher-v$NEW_VERSION.zip" \
+          index.html \
+          js/ \
+          css/ \
+          docs/README.md \
+          -x "*.git*" "js/*_FIXED.js"
+          
+        # Create source code archive
+        zip -r "release-assets/zx-pixel-smoosher-source-v$NEW_VERSION.zip" \
+          . \
+          -x "*.git*" "node_modules/*" "release-assets/*" "reports/*"
+          
+        # Generate checksums
+        cd release-assets
+        for file in *.zip; do
+          sha256sum "$file" > "$file.sha256"
+          md5sum "$file" > "$file.md5"
+        done
+        cd ..
+        
+        # Create release info file
+        cat > release-assets/RELEASE_INFO.txt << EOF
+        ZX Pixel Smoosher v$NEW_VERSION Release Package
+        
+        Release Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        Release Type: ${{ needs.analyze-changes.outputs.release_type }}
+        Commit SHA: ${{ github.sha }}
+        
+        Package Contents:
+        - zx-pixel-smoosher-v$NEW_VERSION.zip: Ready-to-run application
+        - zx-pixel-smoosher-source-v$NEW_VERSION.zip: Complete source code
+        - *.sha256, *.md5: Checksums for verification
+        
+        Installation:
+        1. Download zx-pixel-smoosher-v$NEW_VERSION.zip
+        2. Extract to your desired location
+        3. Open index.html in any modern web browser
+        4. Start creating ZX Spectrum graphics!
+        
+        System Requirements:
+        - Modern web browser (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)
+        - No installation or build process required
+        - Works offline from file:// protocol
+        
+        For more information, visit:
+        https://github.com/${{ github.repository }}
+        EOF
+        
+    - name: Commit version changes
+      run: |
+        NEW_VERSION="${{ steps.version.outputs.new_version }}"
+        
+        # Stage changes
+        git add -A
+        
+        # Check if there are changes to commit
+        if git diff --cached --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "chore: release version $NEW_VERSION
+          
+          - Update version to $NEW_VERSION
+          - Generate changelog for release
+          - Update package.json version
+          
+          Release type: ${{ needs.analyze-changes.outputs.release_type }}
+          [skip ci]"
+          
+          git push origin ${{ github.ref_name }}
+        fi
+        
+    - name: Create Git tag
+      run: |
+        NEW_VERSION="${{ steps.version.outputs.new_version }}"
+        git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+        git push origin "v$NEW_VERSION"
+        
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.new_version }}
+        release_name: ZX Pixel Smoosher v${{ steps.version.outputs.new_version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: ${{ needs.analyze-changes.outputs.release_type == 'prerelease' }}
+        
+    - name: Upload release assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release-assets/zx-pixel-smoosher-v${{ steps.version.outputs.new_version }}.zip
+        asset_name: zx-pixel-smoosher-v${{ steps.version.outputs.new_version }}.zip
+        asset_content_type: application/zip
+        
+    - name: Upload source code asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release-assets/zx-pixel-smoosher-source-v${{ steps.version.outputs.new_version }}.zip
+        asset_name: zx-pixel-smoosher-source-v${{ steps.version.outputs.new_version }}.zip
+        asset_content_type: application/zip
+        
+    - name: Upload release info
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release-assets/RELEASE_INFO.txt
+        asset_name: RELEASE_INFO.txt
+        asset_content_type: text/plain
+
+  notify-release:
+    needs: [analyze-changes, create-release]
+    if: needs.analyze-changes.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Create release announcement issue
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const newVersion = '${{ needs.create-release.outputs.new_version }}';
+          const releaseType = '${{ needs.analyze-changes.outputs.release_type }}';
+          
+          const body = `# 🎉 ZX Pixel Smoosher v${newVersion} Released!
+          
+          A new ${releaseType} release of ZX Pixel Smoosher is now available.
+          
+          ## 📦 Download
+          - **Ready-to-use**: [zx-pixel-smoosher-v${newVersion}.zip](https://github.com/${{ github.repository }}/releases/tag/v${newVersion})
+          - **Source code**: Available on the [releases page](https://github.com/${{ github.repository }}/releases/tag/v${newVersion})
+          
+          ## 🚀 What's New
+          Check out the [release notes](https://github.com/${{ github.repository }}/releases/tag/v${newVersion}) for detailed changelog.
+          
+          ## 🎨 ZX Pixel Smoosher Features
+          - Authentic ZX Spectrum graphics constraints (256×192, 16-color palette)
+          - Advanced drawing tools and shape generation
+          - Export to PNG, SCR (ZX Spectrum native), and ASM formats
+          - No installation required - runs directly in your browser!
+          
+          ## 💬 Feedback
+          We'd love to hear your feedback! Please share your thoughts, report any issues, or suggest new features.
+          
+          Happy pixel smashing! 🎨✨`;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🎉 Release v${newVersion} - ZX Pixel Smoosher`,
+            body: body,
+            labels: ['release', 'announcement']
+          });
+          
+    - name: Update project statistics
+      run: |
+        echo "📊 Recording release statistics..."
+        mkdir -p .github/release-stats
+        
+        cat > .github/release-stats/v${{ needs.create-release.outputs.new_version }}.json << EOF
+        {
+          "version": "${{ needs.create-release.outputs.new_version }}",
+          "release_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+          "release_type": "${{ needs.analyze-changes.outputs.release_type }}",
+          "commit_sha": "${{ github.sha }}",
+          "branch": "${{ github.ref_name }}",
+          "workflow_run_id": "${{ github.run_id }}",
+          "actor": "${{ github.actor }}"
+        }
+        EOF
+        
+        echo "Release v${{ needs.create-release.outputs.new_version }} completed successfully! 🎉"

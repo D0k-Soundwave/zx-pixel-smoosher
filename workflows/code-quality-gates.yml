@@ -1,0 +1,621 @@
+name: Code Quality Gates & Linting
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    paths:
+      - 'js/**/*.js'
+      - 'css/**/*.css'
+      - 'index.html'
+      - '*.json'
+  pull_request:
+    branches: [ master, main, develop ]
+    paths:
+      - 'js/**/*.js'
+      - 'css/**/*.css' 
+      - 'index.html'
+      - '*.json'
+  schedule:
+    # Run code quality checks daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  checks: write
+
+jobs:
+  javascript-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Create package.json for linting tools
+      run: |
+        cat > package.json << 'EOF'
+        {
+          "name": "zx-pixel-smoosher-quality",
+          "version": "1.0.0",
+          "scripts": {
+            "lint:js": "eslint js/**/*.js --format=json --output-file=reports/eslint-results.json || true",
+            "lint:js:verbose": "eslint js/**/*.js --format=stylish",
+            "complexity": "plato -r -d reports/complexity js/",
+            "jsdoc-validate": "jsdoc-to-markdown js/**/*.js > reports/api-docs.md",
+            "prettier-check": "prettier --check js/**/*.js css/**/*.css index.html",
+            "prettier-fix": "prettier --write js/**/*.js css/**/*.css index.html"
+          },
+          "devDependencies": {
+            "eslint": "^8.57.0",
+            "@eslint/js": "^9.0.0",
+            "eslint-plugin-jsdoc": "^48.2.0",
+            "eslint-config-prettier": "^9.1.0",
+            "prettier": "^3.2.5",
+            "jsdoc": "^4.0.2",
+            "jsdoc-to-markdown": "^8.0.1",
+            "plato": "^1.7.0",
+            "jshint": "^2.13.6"
+          }
+        }
+        EOF
+        
+    - name: Install quality tools
+      run: npm install
+      
+    - name: Create reports directory
+      run: mkdir -p reports
+      
+    - name: Create ESLint configuration for ZX Pixel Smoosher
+      run: |
+        cat > .eslintrc.js << 'EOF'
+        module.exports = {
+          env: {
+            browser: true,
+            es2021: true
+          },
+          extends: [
+            'eslint:recommended',
+            'prettier'
+          ],
+          plugins: ['jsdoc'],
+          parserOptions: {
+            ecmaVersion: 2021,
+            sourceType: 'script'  // ZX Pixel Smoosher uses traditional scripts
+          },
+          globals: {
+            // ZX Pixel Smoosher global classes
+            'ZXSpectrumPixelSmasher': 'writable',
+            'EventBus': 'writable',
+            'MemoryManager': 'writable',
+            'ErrorHandler': 'writable',
+            'ShapeGenerator': 'writable',
+            'HistoryManager': 'writable',
+            'OptimizedHistoryManager': 'writable',
+            'FillManager': 'writable',
+            'FillToolManager': 'writable',
+            
+            // Common browser globals
+            'requestAnimationFrame': 'readonly',
+            'cancelAnimationFrame': 'readonly',
+            'ImageData': 'readonly',
+            'Uint8Array': 'readonly',
+            'Uint8ClampedArray': 'readonly'
+          },
+          rules: {
+            // ZX Spectrum specific rules
+            'no-unused-vars': ['error', { 
+              'varsIgnorePattern': '^(ZX|Spectrum|Color|Shape|Fill|History|Memory|Event|Error)',
+              'argsIgnorePattern': '^_'
+            }],
+            
+            // Code quality rules
+            'complexity': ['warn', { max: 15 }],
+            'max-depth': ['warn', { max: 4 }],
+            'max-lines-per-function': ['warn', { max: 100 }],
+            'max-params': ['warn', { max: 6 }],
+            'no-magic-numbers': ['warn', { 
+              ignore: [0, 1, 2, 8, 16, 32, 192, 256, 768, 6144, 6912],  // ZX Spectrum constants
+              ignoreArrayIndexes: true 
+            }],
+            
+            // Performance rules
+            'no-inner-declarations': 'error',
+            'no-loop-func': 'error',
+            'no-implied-eval': 'error',
+            'no-new-func': 'error',
+            'no-new-wrappers': 'error',
+            
+            // Canvas/Graphics specific rules
+            'no-console': ['warn', { allow: ['warn', 'error'] }],
+            'prefer-const': 'error',
+            'no-var': 'error',
+            'no-undef': 'error',
+            'no-global-assign': 'error',
+            
+            // JSDoc rules for documentation
+            'jsdoc/check-alignment': 'error',
+            'jsdoc/check-indentation': 'error',
+            'jsdoc/check-param-names': 'error',
+            'jsdoc/check-syntax': 'error',
+            'jsdoc/check-tag-names': 'error',
+            'jsdoc/check-types': 'error',
+            'jsdoc/require-description': 'warn',
+            'jsdoc/require-param': 'warn',
+            'jsdoc/require-param-description': 'warn',
+            'jsdoc/require-param-type': 'warn',
+            'jsdoc/require-returns': 'warn',
+            'jsdoc/require-returns-description': 'warn',
+            'jsdoc/require-returns-type': 'warn'
+          }
+        };
+        EOF
+        
+    - name: Create Prettier configuration
+      run: |
+        cat > .prettierrc.json << 'EOF'
+        {
+          "printWidth": 100,
+          "tabWidth": 4,
+          "useTabs": false,
+          "semi": true,
+          "singleQuote": true,
+          "quoteProps": "as-needed",
+          "trailingComma": "none",
+          "bracketSpacing": true,
+          "bracketSameLine": false,
+          "arrowParens": "avoid",
+          "endOfLine": "lf",
+          "embeddedLanguageFormatting": "auto",
+          "overrides": [
+            {
+              "files": "*.html",
+              "options": {
+                "parser": "html",
+                "tabWidth": 2
+              }
+            },
+            {
+              "files": "*.css",
+              "options": {
+                "parser": "css",
+                "tabWidth": 2
+              }
+            }
+          ]
+        }
+        EOF
+        
+    - name: Create JSHint configuration
+      run: |
+        cat > .jshintrc << 'EOF'
+        {
+          "browser": true,
+          "esversion": 8,
+          "strict": false,
+          "curly": true,
+          "eqeqeq": true,
+          "freeze": true,
+          "futurehostile": true,
+          "latedef": "nofunc",
+          "noarg": true,
+          "nonbsp": true,
+          "nonew": true,
+          "undef": true,
+          "unused": "vars",
+          "varstmt": true,
+          "maxparams": 6,
+          "maxdepth": 4,
+          "maxstatements": 50,
+          "maxcomplexity": 15,
+          "maxlen": 120,
+          "globals": {
+            "ZXSpectrumPixelSmasher": true,
+            "EventBus": true,
+            "MemoryManager": true,
+            "ErrorHandler": true,
+            "ShapeGenerator": true,
+            "HistoryManager": true,
+            "OptimizedHistoryManager": true,
+            "FillManager": true,
+            "FillToolManager": true,
+            "requestAnimationFrame": false,
+            "cancelAnimationFrame": false
+          }
+        }
+        EOF
+        
+    - name: Run ESLint analysis
+      continue-on-error: true
+      run: |
+        echo "🔍 Running ESLint analysis..."
+        npm run lint:js
+        npm run lint:js:verbose > reports/eslint-output.txt 2>&1 || true
+        
+        echo "ESLint analysis completed"
+        
+    - name: Run JSHint analysis
+      continue-on-error: true
+      run: |
+        echo "🔍 Running JSHint analysis..."
+        npx jshint js/**/*.js --reporter=json > reports/jshint-results.json || true
+        npx jshint js/**/*.js > reports/jshint-output.txt || true
+        
+        echo "JSHint analysis completed"
+        
+    - name: Check code formatting with Prettier
+      continue-on-error: true
+      run: |
+        echo "🎨 Checking code formatting..."
+        npm run prettier-check > reports/prettier-output.txt 2>&1 || true
+        
+        echo "Format check completed"
+        
+    - name: Generate code complexity report
+      continue-on-error: true
+      run: |
+        echo "📊 Generating complexity analysis..."
+        npm run complexity || true
+        
+        # Generate summary
+        if [ -d "reports/complexity" ]; then
+          echo "## Code Complexity Report" > reports/complexity-summary.md
+          echo "**Generated:** $(date)" >> reports/complexity-summary.md
+          echo "" >> reports/complexity-summary.md
+          
+          # Find complexity report files
+          if [ -f "reports/complexity/report.json" ]; then
+            node -e "
+              try {
+                const report = JSON.parse(require('fs').readFileSync('reports/complexity/report.json'));
+                console.log('### Summary Statistics');
+                console.log('- **Total Files:** ' + report.reports.length);
+                console.log('- **Average Complexity:** ' + (report.summary.average.complexity || 0).toFixed(2));
+                console.log('- **Average Maintainability:** ' + (report.summary.average.maintainability || 0).toFixed(2));
+                console.log('');
+                console.log('### Files by Complexity');
+                report.reports
+                  .sort((a, b) => b.complexity.aggregate - a.complexity.aggregate)
+                  .slice(0, 10)
+                  .forEach(file => {
+                    console.log('- **' + file.info.file + '**: ' + file.complexity.aggregate.toFixed(2));
+                  });
+              } catch (e) {
+                console.log('Could not parse complexity report');
+              }
+            " >> reports/complexity-summary.md
+          fi
+        fi
+        
+        echo "Complexity analysis completed"
+        
+    - name: Validate JSDoc documentation
+      continue-on-error: true
+      run: |
+        echo "📚 Validating JSDoc documentation..."
+        npm run jsdoc-validate || true
+        
+        # Count documented functions
+        TOTAL_FUNCTIONS=$(grep -r "function\|class\|const.*=.*=>" js/ | wc -l)
+        DOCUMENTED_FUNCTIONS=$(grep -r "@param\|@returns\|@description" js/ | wc -l)
+        
+        echo "## Documentation Coverage" > reports/jsdoc-coverage.md
+        echo "**Analysis Date:** $(date)" >> reports/jsdoc-coverage.md
+        echo "" >> reports/jsdoc-coverage.md
+        echo "- **Total Functions/Classes:** $TOTAL_FUNCTIONS" >> reports/jsdoc-coverage.md
+        echo "- **Documented Items:** $DOCUMENTED_FUNCTIONS" >> reports/jsdoc-coverage.md
+        
+        if [ "$TOTAL_FUNCTIONS" -gt 0 ]; then
+          COVERAGE_PERCENT=$((DOCUMENTED_FUNCTIONS * 100 / TOTAL_FUNCTIONS))
+          echo "- **Documentation Coverage:** ${COVERAGE_PERCENT}%" >> reports/jsdoc-coverage.md
+        fi
+        
+        echo "JSDoc validation completed"
+        
+    - name: Run ZX Spectrum specific code analysis
+      run: |
+        echo "🎨 Running ZX Spectrum specific analysis..."
+        
+        cat > zx-analysis.js << 'EOF'
+        const fs = require('fs');
+        const path = require('path');
+        
+        class ZXSpectrumAnalyzer {
+          constructor() {
+            this.results = {
+              zx_constants: [],
+              color_usage: [],
+              resolution_checks: [],
+              canvas_operations: [],
+              memory_management: [],
+              performance_patterns: []
+            };
+          }
+          
+          analyzeFile(filePath) {
+            const content = fs.readFileSync(filePath, 'utf8');
+            const lines = content.split('\n');
+            
+            lines.forEach((line, index) => {
+              const lineNum = index + 1;
+              
+              // Check for ZX Spectrum constants
+              if (line.match(/256.*192|192.*256/)) {
+                this.results.zx_constants.push({
+                  file: filePath,
+                  line: lineNum,
+                  content: line.trim(),
+                  type: 'resolution'
+                });
+              }
+              
+              if (line.match(/6912|6144.*768/)) {
+                this.results.zx_constants.push({
+                  file: filePath,
+                  line: lineNum,
+                  content: line.trim(),
+                  type: 'memory_layout'
+                });
+              }
+              
+              // Check color palette usage
+              if (line.match(/#[0-9a-fA-F]{6}|rgb\(|rgba\(/)) {
+                this.results.color_usage.push({
+                  file: filePath,
+                  line: lineNum,
+                  content: line.trim()
+                });
+              }
+              
+              // Check canvas operations
+              if (line.match(/getContext|fillRect|drawImage|getImageData|putImageData/)) {
+                this.results.canvas_operations.push({
+                  file: filePath,
+                  line: lineNum,
+                  content: line.trim(),
+                  operation: line.match(/(getContext|fillRect|drawImage|getImageData|putImageData)/)[1]
+                });
+              }
+              
+              // Check memory management patterns
+              if (line.match(/new\s+\w+|delete\s+|\.length\s*=\s*0|null|undefined/)) {
+                this.results.memory_management.push({
+                  file: filePath,
+                  line: lineNum,
+                  content: line.trim()
+                });
+              }
+              
+              // Check performance patterns
+              if (line.match(/requestAnimationFrame|setTimeout|setInterval|performance\./)) {
+                this.results.performance_patterns.push({
+                  file: filePath,
+                  line: lineNum,
+                  content: line.trim()
+                });
+              }
+            });
+          }
+          
+          generateReport() {
+            let report = "# ZX Spectrum Code Analysis Report\n\n";
+            report += `**Generated:** ${new Date().toISOString()}\n\n`;
+            
+            report += `## Summary\n`;
+            report += `- **ZX Constants Found:** ${this.results.zx_constants.length}\n`;
+            report += `- **Color Usage Instances:** ${this.results.color_usage.length}\n`;
+            report += `- **Canvas Operations:** ${this.results.canvas_operations.length}\n`;
+            report += `- **Memory Management Patterns:** ${this.results.memory_management.length}\n`;
+            report += `- **Performance Patterns:** ${this.results.performance_patterns.length}\n\n`;
+            
+            // ZX Constants section
+            if (this.results.zx_constants.length > 0) {
+              report += `## ZX Spectrum Constants\n`;
+              this.results.zx_constants.forEach(item => {
+                report += `- **${item.file}:${item.line}** (${item.type}): \`${item.content}\`\n`;
+              });
+              report += "\n";
+            }
+            
+            // Canvas operations summary
+            if (this.results.canvas_operations.length > 0) {
+              const opCounts = this.results.canvas_operations.reduce((acc, op) => {
+                acc[op.operation] = (acc[op.operation] || 0) + 1;
+                return acc;
+              }, {});
+              
+              report += `## Canvas Operations Summary\n`;
+              Object.entries(opCounts).forEach(([op, count]) => {
+                report += `- **${op}**: ${count} occurrences\n`;
+              });
+              report += "\n";
+            }
+            
+            return report;
+          }
+        }
+        
+        // Analyze all JavaScript files
+        const analyzer = new ZXSpectrumAnalyzer();
+        const jsFiles = [];
+        
+        function findJSFiles(dir) {
+          const files = fs.readdirSync(dir);
+          files.forEach(file => {
+            const fullPath = path.join(dir, file);
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+              findJSFiles(fullPath);
+            } else if (file.endsWith('.js')) {
+              jsFiles.push(fullPath);
+            }
+          });
+        }
+        
+        findJSFiles('js');
+        
+        jsFiles.forEach(file => {
+          console.log(`Analyzing: ${file}`);
+          analyzer.analyzeFile(file);
+        });
+        
+        const report = analyzer.generateReport();
+        fs.writeFileSync('reports/zx-spectrum-analysis.md', report);
+        
+        console.log('ZX Spectrum analysis completed');
+        console.log(`Found ${jsFiles.length} JavaScript files to analyze`);
+        EOF
+        
+        node zx-analysis.js
+        
+    - name: Generate comprehensive quality report
+      run: |
+        echo "📋 Generating comprehensive quality report..."
+        
+        cat > reports/quality-summary.md << 'EOF'
+        # Code Quality Report - ZX Pixel Smoosher
+        
+        **Report Generated:** $(date)
+        **Commit SHA:** ${{ github.sha }}
+        **Branch:** ${{ github.ref_name }}
+        
+        ## Quality Gates Status
+        
+        ### ESLint Analysis
+        EOF
+        
+        # Parse ESLint results
+        if [ -f "reports/eslint-results.json" ]; then
+          node -e "
+            try {
+              const results = JSON.parse(require('fs').readFileSync('reports/eslint-results.json'));
+              const totalErrors = results.reduce((sum, file) => sum + file.errorCount, 0);
+              const totalWarnings = results.reduce((sum, file) => sum + file.warningCount, 0);
+              console.log('- **Total Errors:** ' + totalErrors);
+              console.log('- **Total Warnings:** ' + totalWarnings);
+              console.log('- **Files Analyzed:** ' + results.length);
+              console.log('- **Status:** ' + (totalErrors > 0 ? '❌ FAILED' : totalWarnings > 0 ? '⚠️ WARNING' : '✅ PASSED'));
+            } catch (e) {
+              console.log('- **Status:** ❌ Analysis failed');
+            }
+          " >> reports/quality-summary.md
+        fi
+        
+        echo "" >> reports/quality-summary.md
+        echo "### JSHint Analysis" >> reports/quality-summary.md
+        
+        # Parse JSHint results  
+        if [ -f "reports/jshint-results.json" ]; then
+          node -e "
+            try {
+              const results = JSON.parse(require('fs').readFileSync('reports/jshint-results.json'));
+              const totalIssues = results.length;
+              console.log('- **Total Issues:** ' + totalIssues);
+              console.log('- **Status:** ' + (totalIssues > 0 ? '⚠️ ISSUES FOUND' : '✅ CLEAN'));
+            } catch (e) {
+              console.log('- **Status:** ❌ Analysis failed');
+            }
+          " >> reports/quality-summary.md
+        fi
+        
+        echo "" >> reports/quality-summary.md
+        echo "### Code Formatting" >> reports/quality-summary.md
+        if grep -q "All matched files use Prettier code style" reports/prettier-output.txt 2>/dev/null; then
+          echo "- **Status:** ✅ FORMATTED" >> reports/quality-summary.md
+        else
+          echo "- **Status:** ❌ FORMATTING ISSUES" >> reports/quality-summary.md
+        fi
+        
+        # Append other reports if they exist
+        echo "" >> reports/quality-summary.md
+        [ -f "reports/complexity-summary.md" ] && cat reports/complexity-summary.md >> reports/quality-summary.md
+        echo "" >> reports/quality-summary.md  
+        [ -f "reports/jsdoc-coverage.md" ] && cat reports/jsdoc-coverage.md >> reports/quality-summary.md
+        echo "" >> reports/quality-summary.md
+        [ -f "reports/zx-spectrum-analysis.md" ] && cat reports/zx-spectrum-analysis.md >> reports/quality-summary.md
+        
+    - name: Set quality gate status
+      id: quality_gate
+      run: |
+        ESLINT_ERRORS=0
+        JSHINT_ISSUES=0
+        FORMAT_ISSUES=0
+        
+        # Check ESLint errors
+        if [ -f "reports/eslint-results.json" ]; then
+          ESLINT_ERRORS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('reports/eslint-results.json')).reduce((sum, file) => sum + file.errorCount, 0))" 2>/dev/null || echo "0")
+        fi
+        
+        # Check JSHint issues
+        if [ -f "reports/jshint-results.json" ]; then
+          JSHINT_ISSUES=$(node -e "console.log(JSON.parse(require('fs').readFileSync('reports/jshint-results.json')).length)" 2>/dev/null || echo "0")
+        fi
+        
+        # Check formatting
+        if ! grep -q "All matched files use Prettier code style" reports/prettier-output.txt 2>/dev/null; then
+          FORMAT_ISSUES=1
+        fi
+        
+        echo "Quality gate analysis:"
+        echo "- ESLint errors: $ESLINT_ERRORS"
+        echo "- JSHint issues: $JSHINT_ISSUES"
+        echo "- Format issues: $FORMAT_ISSUES"
+        
+        if [ "$ESLINT_ERRORS" -eq 0 ] && [ "$JSHINT_ISSUES" -eq 0 ] && [ "$FORMAT_ISSUES" -eq 0 ]; then
+          echo "quality_gate=passed" >> $GITHUB_OUTPUT
+          echo "🎉 All quality gates passed!"
+        else
+          echo "quality_gate=failed" >> $GITHUB_OUTPUT
+          echo "❌ Quality gate failures detected"
+        fi
+        
+    - name: Upload quality reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-quality-reports
+        path: |
+          reports/
+          .eslintrc.js
+          .prettierrc.json
+          .jshintrc
+        retention-days: 30
+        
+    - name: Comment quality results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            const summary = fs.readFileSync('reports/quality-summary.md', 'utf8');
+            const qualityGate = '${{ steps.quality_gate.outputs.quality_gate }}';
+            
+            const emoji = qualityGate === 'passed' ? '✅' : '❌';
+            const title = qualityGate === 'passed' ? 'Quality Gates Passed' : 'Quality Issues Detected';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ${emoji} ${title}\n\n${summary}`
+            });
+          } catch (error) {
+            console.log('Could not read quality summary');
+          }
+          
+    - name: Fail if quality gate failed
+      if: steps.quality_gate.outputs.quality_gate == 'failed'
+      run: |
+        echo "❌ Code quality gate failed!"
+        echo "Please fix the issues identified in the quality report before merging."
+        exit 1
