@@ -1,35 +1,36 @@
-# ZX Pixel Smoosher v1.1.0
+# ZX Pixel Smoosher v1.1.1
 
-**Release Date:** 2025-09-05 16:20:18 UTC
-**Release Type:** minor
+**Release Date:** 2025-09-05 16:45:08 UTC
+**Release Type:** patch
 
-## Initial Release
+## Changes since v1.1.0
 
 ### 🚀 New Features
-- feat: Add comprehensive README for ZX Pixel Smoosher (D0k)
-- feat: Add comprehensive production-grade workflow suite (D0k)
+_No new features in this release_
 
 ### 🐛 Bug Fixes
-- fix: Move workflows to correct .github/workflows directory (D0k)
+- fix: add simplified GitHub Pages deployment workflow (D0k)
 
 ### 📚 Documentation
-_No documentation changes in this release_
+- docs: trigger GitHub Pages deployment (D0k)
 
 ### 🔧 Maintenance
 _No maintenance changes in this release_
 
 ### 🎨 ZX Spectrum Features
-- feat: Add comprehensive README for ZX Pixel Smoosher (D0k)
-- Initial commit: ZX Pixel Smoosher (D0k)
+- trigger: Deploy ZX Pixel Smoosher to GitHub Pages (D0k)
 
 ### ⚡ Performance Improvements
 _No performance improvements in this release_
 
 ### 📊 Technical Details
-- **Commit Range:** ..HEAD
+- **Commit Range:** v1.1.0..HEAD
 - **Total Commits:** 5
-- **Contributors:** 0
+- **Contributors:** 1
+- **Files Changed:** 3
+- **Lines Added:** 41
+- **Lines Deleted:** 0
 
 ---
 
-**Full Changelog:** https://github.com/D0k-Soundwave/zx-pixel-smoosher/compare/...v1.1.0
+**Full Changelog:** https://github.com/D0k-Soundwave/zx-pixel-smoosher/compare/v1.1.0...v1.1.1
