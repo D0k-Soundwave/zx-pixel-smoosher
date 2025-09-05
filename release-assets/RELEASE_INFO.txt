@@ -1,0 +1,24 @@
+ZX Pixel Smoosher v1.1.0 Release Package
+
+Release Date: 2025-09-05 16:20:18 UTC
+Release Type: minor
+Commit SHA: a6c2f01da02bcbdbe818d0b57d858e4ab109980f
+
+Package Contents:
+- zx-pixel-smoosher-v1.1.0.zip: Ready-to-run application
+- zx-pixel-smoosher-source-v1.1.0.zip: Complete source code
+- *.sha256, *.md5: Checksums for verification
+
+Installation:
+1. Download zx-pixel-smoosher-v1.1.0.zip
+2. Extract to your desired location
+3. Open index.html in any modern web browser
+4. Start creating ZX Spectrum graphics!
+
+System Requirements:
+- Modern web browser (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)
+- No installation or build process required
+- Works offline from file:// protocol
+
+For more information, visit:
+https://github.com/D0k-Soundwave/zx-pixel-smoosher
