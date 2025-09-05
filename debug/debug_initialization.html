@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug FillManager Initialization</title>
+</head>
+<body>
+    <h1>Debug FillManager Initialization</h1>
+    <div id="output"></div>
+
+    <!-- Load the same scripts as the main app -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+
+    <script>
+        function log(msg) {
+            console.log(msg);
+            document.getElementById('output').innerHTML += '<div>' + msg + '</div>';
+        }
+
+        try {
+            log('Starting initialization test...');
+            
+            // Check if classes are loaded
+            log('EventBus available: ' + (typeof EventBus !== 'undefined'));
+            log('ErrorHandler available: ' + (typeof ErrorHandler !== 'undefined'));
+            log('MemoryManager available: ' + (typeof MemoryManager !== 'undefined'));
+            log('HistoryManager available: ' + (typeof HistoryManager !== 'undefined'));
+            log('FillManager available: ' + (typeof FillManager !== 'undefined'));
+            log('FillToolManager available: ' + (typeof FillToolManager !== 'undefined'));
+            
+            // Initialize dependencies like the main app
+            const eventBus = new EventBus();
+            log('EventBus created');
+            
+            const errorHandler = new ErrorHandler(eventBus);
+            log('ErrorHandler created');
+            
+            const memoryManager = new MemoryManager(eventBus, {
+                aggressiveMode: true,
+                cleanupInterval: 3000,
+                forceGCInterval: 8000,
+                memoryThreshold: 30 * 1024 * 1024,
+                objectPoolSize: 500,
+                cacheLimit: 50
+            });
+            log('MemoryManager created');
+
+            // Create a minimal ColorManager for testing
+            const colorManager = {
+                state: { ink: 0, paper: 7, bright: false, flash: false },
+                setInk: function() {},
+                setPaper: function() {},
+                getState: function() { return this.state; }
+            };
+            log('ColorManager mock created');
+
+            // Create a minimal StateManager for testing
+            const stateManager = {
+                state: {
+                    pixels: Array(192).fill().map(() => new Uint8Array(256)),
+                    attributes: Array(24).fill().map(() => Array(32).fill({ink: 0, paper: 7, bright: false, flash: false}))
+                },
+                getState: function() { return this.state; },
+                saveState: function() {},
+                setPixels: function(pixels) { this.state.pixels = pixels; },
+                setAttributes: function(attrs) { this.state.attributes = attrs; }
+            };
+            log('StateManager mock created');
+
+            // Test FillManager creation
+            log('Attempting to create FillManager...');
+            const fillManager = new FillManager(eventBus, stateManager, colorManager, memoryManager);
+            log('FillManager created successfully!');
+            log('Available fill types: ' + fillManager.getAvailableFillTypes().join(', '));
+
+            // Test FillToolManager creation
+            log('Attempting to create FillToolManager...');
+            const fillToolManager = new FillToolManager(eventBus, fillManager, colorManager);
+            log('FillToolManager created successfully!');
+
+            log('ALL INITIALIZATION TESTS PASSED!');
+
+        } catch (error) {
+            log('ERROR: ' + error.message);
+            log('Stack: ' + error.stack);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Validate HTML structure
+      run: |
+        # Check that index.html exists and is valid
+        if [ ! -f "index.html" ]; then
+          echo "Error: index.html not found"
+          exit 1
+        fi
+        
+        # Basic HTML validation
+        grep -q "<title>" index.html || { echo "Error: No title tag found"; exit 1; }
+        grep -q "ZXSpectrumPixelSmasher" index.html || { echo "Error: Main script not referenced"; exit 1; }
+        
+    - name: Validate JavaScript files
+      run: |
+        # Check core JavaScript files exist
+        required_files=(
+          "js/ZXSpectrumPixelSmasher.js"
+          "js/core/EventBus.js"
+          "js/core/ErrorHandler.js"
+          "js/core/MemoryManager.js"
+          "js/shapes/ShapeGenerator.js"
+          "js/managers/HistoryManager.js"
+          "js/managers/FillManager.js"
+          "js/managers/FillToolManager.js"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "Error: Required file $file not found"
+            exit 1
+          fi
+          
+          # Basic syntax check - ensure no obvious syntax errors
+          if [[ "$file" == *.js ]]; then
+            node -c "$file" || { echo "Syntax error in $file"; exit 1; }
+          fi
+        done
+        
+    - name: Validate CSS files
+      run: |
+        if [ ! -f "css/styles.css" ]; then
+          echo "Error: css/styles.css not found"
+          exit 1
+        fi
+        
+        # Check for critical CSS classes
+        grep -q "canvas-container" css/styles.css || { echo "Warning: canvas-container class not found"; }
+        grep -q "color-palette" css/styles.css || { echo "Warning: color-palette class not found"; }
+        
+    - name: Create deployment package
+      run: |
+        # Create a clean deployment directory
+        mkdir -p deploy
+        
+        # Copy essential files for deployment
+        cp index.html deploy/
+        cp -r js deploy/
+        cp -r css deploy/
+        cp package.json deploy/ 2>/dev/null || echo "package.json not found, skipping"
+        
+        # Copy documentation for GitHub Pages
+        # Note: CLAUDE.md intentionally excluded from deployment
+        
+        # Create a simple README for the deployed site
+        cat > deploy/README.md << 'EOF'
+# ZX Pixel Smoosher - Live Demo
+
+🎨 **Authentic ZX Spectrum Graphics Editor**
+
+This is the live deployment of ZX Pixel Smoosher, a web-based graphics editor that authentically recreates ZX Spectrum graphics constraints.
+
+## Features:
+- 256×192 resolution with authentic 16-color palette
+- ZX Spectrum attribute block constraints (2 colors per 8×8 block)
+- Professional drawing tools (brush, shapes, fill patterns)
+- Export to PNG, SCR (ZX Spectrum native), and ASM formats
+- Advanced undo/redo system with memory management
+- Pure JavaScript - no dependencies required!
+
+## Usage:
+Simply open the application in any modern web browser. No installation or setup required.
+
+**Repository:** https://github.com/D0k-Soundwave/zx-pixel-smoosher
+EOF
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+      
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './deploy'
+        
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

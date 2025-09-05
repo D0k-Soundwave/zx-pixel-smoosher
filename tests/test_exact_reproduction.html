@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exact Reproduction Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+        }
+        .log {
+            margin: 5px 0;
+            padding: 5px;
+            background: #374151;
+            border-radius: 4px;
+        }
+        .error { color: #ef4444; }
+        .success { color: #10b981; }
+        .warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>Exact Reproduction Test</h1>
+    <div id="log"></div>
+
+    <!-- Exact same script loading order as main app -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    <script src="js/ZXSpectrumPixelSmasher.js"></script>
+    
+    <script>
+        function addLog(message, type = 'info') {
+            const div = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : '';
+            div.innerHTML += `<div class="log ${className}">[${timestamp}] ${message}</div>`;
+            console.log(`[${type}] ${message}`);
+        }
+        
+        window.addEventListener('load', () => {
+            addLog('Page loaded, attempting to create ZXSpectrumPixelSmasher...');
+            
+            // Capture all console output
+            const originalConsoleError = console.error;
+            const originalConsoleWarn = console.warn;
+            const originalConsoleLog = console.log;
+            
+            console.error = function(...args) {
+                addLog(args.join(' '), 'error');
+                originalConsoleError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                addLog(args.join(' '), 'warning');
+                originalConsoleWarn.apply(console, args);
+            };
+            
+            console.log = function(...args) {
+                addLog(args.join(' '), 'info');
+                originalConsoleLog.apply(console, args);
+            };
+            
+            try {
+                addLog('Creating ZXSpectrumPixelSmasher instance...', 'info');
+                const app = new ZXSpectrumPixelSmasher();
+                addLog('ZXSpectrumPixelSmasher created successfully!', 'success');
+                
+                // Check manager availability
+                addLog(`fillManager available: ${!!app.fillManager}`, app.fillManager ? 'success' : 'error');
+                addLog(`fillToolManager available: ${!!app.fillToolManager}`, app.fillToolManager ? 'success' : 'error');
+                
+                if (app.fillManager) {
+                    addLog(`Available fill types: ${app.fillManager.getAvailableFillTypes().join(', ')}`, 'success');
+                }
+                
+            } catch (error) {
+                addLog(`FAILED to create ZXSpectrumPixelSmasher: ${error.message}`, 'error');
+                addLog(`Error stack: ${error.stack}`, 'error');
+            }
+        });
+    </script>
+</body>
+</html>

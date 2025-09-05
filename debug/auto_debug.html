@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ZX Pixel Smoosher - Auto Debug System</title>
+    <style>
+        body { 
+            font-family: 'Courier New', monospace; 
+            margin: 20px; 
+            background: #1e1e1e; 
+            color: #ffffff;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { text-align: center; color: #00ff00; margin-bottom: 30px; }
+        .section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #333; 
+            border-radius: 5px;
+            background: #2a2a2a;
+        }
+        .pass { background: #1a3d1a; border-color: #00ff00; }
+        .fail { background: #3d1a1a; border-color: #ff0000; }
+        .warning { background: #3d3d1a; border-color: #ffff00; }
+        .info { background: #1a1a3d; border-color: #0099ff; }
+        .test-result {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .console-output {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        .button {
+            background: #4a4a4a;
+            color: white;
+            border: 1px solid #666;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover { background: #5a5a5a; }
+        .auto-fix { background: #006600; }
+        .auto-fix:hover { background: #008800; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 ZX Pixel Smoosher - Auto Debug System</h1>
+            <p>Automated diagnosis and repair of fill system issues</p>
+        </div>
+
+        <div class="section info">
+            <h3>📊 Debug Status</h3>
+            <div id="status">Initializing automated diagnostics...</div>
+            <button class="button auto-fix" onclick="runAutoDiagnosis()">🚀 Run Auto Diagnosis</button>
+            <button class="button auto-fix" onclick="attemptAutoFix()">🔧 Attempt Auto Fix</button>
+            <button class="button" onclick="clearResults()">🗑 Clear Results</button>
+        </div>
+
+        <div class="section">
+            <h3>🧪 Test Results</h3>
+            <div id="testResults"></div>
+        </div>
+
+        <div class="section">
+            <h3>📋 Console Output</h3>
+            <div class="console-output" id="consoleOutput"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔍 Diagnostic Report</h3>
+            <div id="diagnosticReport"></div>
+        </div>
+    </div>
+
+    <!-- Load all ZX Pixel Smoosher scripts -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js" onerror="console.warn('HistoryManager failed to load')"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    <script src="js/ZXSpectrumPixelSmasher.js"></script>
+
+    <script>
+        // Auto Debug System
+        class AutoDebugger {
+            constructor() {
+                this.results = [];
+                this.consoleMessages = [];
+                this.originalConsole = {
+                    log: console.log,
+                    warn: console.warn,
+                    error: console.error
+                };
+                this.setupConsoleInterception();
+            }
+
+            setupConsoleInterception() {
+                const self = this;
+                
+                console.log = (...args) => {
+                    self.originalConsole.log(...args);
+                    self.addConsoleMessage('LOG', args.join(' '));
+                };
+                
+                console.warn = (...args) => {
+                    self.originalConsole.warn(...args);
+                    self.addConsoleMessage('WARN', args.join(' '));
+                };
+                
+                console.error = (...args) => {
+                    self.originalConsole.error(...args);
+                    self.addConsoleMessage('ERROR', args.join(' '));
+                };
+            }
+
+            addConsoleMessage(level, message) {
+                const timestamp = new Date().toLocaleTimeString();
+                this.consoleMessages.push(`[${timestamp}] ${level}: ${message}`);
+                this.updateConsoleDisplay();
+            }
+
+            updateConsoleDisplay() {
+                const output = document.getElementById('consoleOutput');
+                output.textContent = this.consoleMessages.join('\n');
+                output.scrollTop = output.scrollHeight;
+            }
+
+            addResult(test, status, message, details = null) {
+                this.results.push({ test, status, message, details, timestamp: Date.now() });
+                this.updateResultsDisplay();
+            }
+
+            updateResultsDisplay() {
+                const container = document.getElementById('testResults');
+                container.innerHTML = '';
+                
+                this.results.forEach(result => {
+                    const div = document.createElement('div');
+                    div.className = `test-result ${result.status}`;
+                    div.innerHTML = `
+                        <strong>${result.status.toUpperCase()}: ${result.test}</strong><br>
+                        ${result.message}
+                        ${result.details ? '<br><small>' + JSON.stringify(result.details, null, 2) + '</small>' : ''}
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            async runCompleteDiagnosis() {
+                this.addResult('System', 'info', 'Starting comprehensive diagnosis...');
+                
+                // Test 1: Script Loading
+                await this.testScriptLoading();
+                
+                // Test 2: Class Definitions
+                await this.testClassDefinitions();
+                
+                // Test 3: Dependency Creation
+                await this.testDependencyCreation();
+                
+                // Test 4: FillManager Creation
+                await this.testFillManagerCreation();
+                
+                // Test 5: FillToolManager Creation
+                await this.testFillToolManagerCreation();
+                
+                // Test 6: Full App Initialization
+                await this.testFullAppInitialization();
+                
+                // Test 7: Context Menu Integration
+                await this.testContextMenuIntegration();
+                
+                // Generate diagnostic report
+                this.generateDiagnosticReport();
+                
+                this.addResult('System', 'info', 'Comprehensive diagnosis complete!');
+            }
+
+            async testScriptLoading() {
+                const scripts = {
+                    'EventBus': typeof EventBus !== 'undefined',
+                    'ErrorHandler': typeof ErrorHandler !== 'undefined',
+                    'MemoryManager': typeof MemoryManager !== 'undefined',
+                    'HistoryManager': typeof HistoryManager !== 'undefined',
+                    'FillManager': typeof FillManager !== 'undefined',
+                    'FillToolManager': typeof FillToolManager !== 'undefined',
+                    'ZXSpectrumPixelSmasher': typeof ZXSpectrumPixelSmasher !== 'undefined'
+                };
+                
+                const allLoaded = Object.values(scripts).every(loaded => loaded);
+                
+                this.addResult(
+                    'Script Loading',
+                    allLoaded ? 'pass' : 'fail',
+                    allLoaded ? 'All scripts loaded successfully' : 'Some scripts failed to load',
+                    scripts
+                );
+                
+                return allLoaded;
+            }
+
+            async testClassDefinitions() {
+                if (typeof FillManager === 'undefined') {
+                    this.addResult('Class Definitions', 'fail', 'FillManager class not available');
+                    return false;
+                }
+                
+                try {
+                    // Test FillManager constructor signature
+                    const constructorStr = FillManager.toString();
+                    const hasValidConstructor = constructorStr.includes('constructor') && 
+                                               constructorStr.includes('eventBus') &&
+                                               constructorStr.includes('stateManager');
+                    
+                    this.addResult(
+                        'Class Definitions',
+                        hasValidConstructor ? 'pass' : 'fail',
+                        hasValidConstructor ? 'FillManager has valid constructor' : 'FillManager constructor is malformed'
+                    );
+                    
+                    return hasValidConstructor;
+                } catch (error) {
+                    this.addResult('Class Definitions', 'fail', 'Error analyzing FillManager: ' + error.message);
+                    return false;
+                }
+            }
+
+            async testDependencyCreation() {
+                try {
+                    // Create dependencies similar to main app
+                    const eventBus = new EventBus();
+                    const memoryManager = new MemoryManager(eventBus, {});
+                    
+                    const colorManager = {
+                        state: { ink: 0, paper: 7, bright: false, flash: false },
+                        setInk: function() {},
+                        setPaper: function() {},
+                        getState: function() { return this.state; }
+                    };
+                    
+                    const historyManager = {
+                        clear: function() {},
+                        save: function() {},
+                        undo: function() {},
+                        redo: function() {}
+                    };
+                    
+                    const stateManager = {
+                        state: {
+                            pixels: Array(192).fill().map(() => new Uint8Array(256)),
+                            attributes: Array(24).fill().map(() => Array(32).fill({}))
+                        },
+                        getState: function() { return this.state; },
+                        saveState: function() {},
+                        setPixels: function() {},
+                        setAttributes: function() {}
+                    };
+                    
+                    // Store for later tests
+                    this.testDependencies = {
+                        eventBus, memoryManager, colorManager, historyManager, stateManager
+                    };
+                    
+                    this.addResult('Dependency Creation', 'pass', 'All dependencies created successfully');
+                    return true;
+                    
+                } catch (error) {
+                    this.addResult('Dependency Creation', 'fail', 'Error creating dependencies: ' + error.message);
+                    return false;
+                }
+            }
+
+            async testFillManagerCreation() {
+                try {
+                    if (!this.testDependencies) {
+                        this.addResult('FillManager Creation', 'fail', 'Dependencies not available');
+                        return false;
+                    }
+                    
+                    const { eventBus, stateManager, colorManager, memoryManager } = this.testDependencies;
+                    
+                    console.log('🧪 Testing FillManager creation...');
+                    const fillManager = new FillManager(eventBus, stateManager, colorManager, memoryManager);
+                    
+                    const methods = {
+                        'setFillType': typeof fillManager.setFillType === 'function',
+                        'fill': typeof fillManager.fill === 'function',
+                        'getAvailableFillTypes': typeof fillManager.getAvailableFillTypes === 'function',
+                        'floodFill': typeof fillManager.floodFill === 'function',
+                        'patternFill': typeof fillManager.patternFill === 'function'
+                    };
+                    
+                    const allMethodsPresent = Object.values(methods).every(present => present);
+                    
+                    if (allMethodsPresent) {
+                        const fillTypes = fillManager.getAvailableFillTypes();
+                        this.addResult(
+                            'FillManager Creation', 
+                            'pass', 
+                            `FillManager created with ${fillTypes.length} fill types`,
+                            { methods, fillTypes }
+                        );
+                        this.testFillManager = fillManager;
+                        return true;
+                    } else {
+                        this.addResult('FillManager Creation', 'fail', 'FillManager missing required methods', methods);
+                        return false;
+                    }
+                    
+                } catch (error) {
+                    this.addResult('FillManager Creation', 'fail', 'FillManager creation failed: ' + error.message, {
+                        stack: error.stack
+                    });
+                    return false;
+                }
+            }
+
+            async testFillToolManagerCreation() {
+                try {
+                    if (!this.testFillManager || !this.testDependencies) {
+                        this.addResult('FillToolManager Creation', 'fail', 'FillManager not available');
+                        return false;
+                    }
+                    
+                    const { eventBus, colorManager } = this.testDependencies;
+                    
+                    console.log('🧪 Testing FillToolManager creation...');
+                    const fillToolManager = new FillToolManager(eventBus, this.testFillManager, colorManager);
+                    
+                    const methods = {
+                        'setFillType': typeof fillToolManager.setFillType === 'function',
+                        'getCurrentFillType': typeof fillToolManager.getCurrentFillType === 'function',
+                        'activateFillTool': typeof fillToolManager.activateFillTool === 'function',
+                        'deactivateFillTool': typeof fillToolManager.deactivateFillTool === 'function'
+                    };
+                    
+                    const allMethodsPresent = Object.values(methods).every(present => present);
+                    
+                    if (allMethodsPresent) {
+                        this.addResult('FillToolManager Creation', 'pass', 'FillToolManager created successfully', methods);
+                        this.testFillToolManager = fillToolManager;
+                        return true;
+                    } else {
+                        this.addResult('FillToolManager Creation', 'fail', 'FillToolManager missing required methods', methods);
+                        return false;
+                    }
+                    
+                } catch (error) {
+                    this.addResult('FillToolManager Creation', 'fail', 'FillToolManager creation failed: ' + error.message, {
+                        stack: error.stack
+                    });
+                    return false;
+                }
+            }
+
+            async testFullAppInitialization() {
+                try {
+                    console.log('🧪 Testing full ZXSpectrumPixelSmasher initialization...');
+                    
+                    const app = new ZXSpectrumPixelSmasher();
+                    
+                    // Give the app time to fully initialize
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    const appState = {
+                        'hasEventBus': !!app.eventBus,
+                        'hasFillManager': !!app.fillManager,
+                        'hasFillToolManager': !!app.fillToolManager,
+                        'fillManagerType': typeof app.fillManager,
+                        'fillToolManagerType': typeof app.fillToolManager,
+                        'fillManagerMethods': app.fillManager ? {
+                            setFillType: typeof app.fillManager.setFillType === 'function',
+                            fill: typeof app.fillManager.fill === 'function'
+                        } : null,
+                        'initializationFlags': {
+                            fillManagerFailed: app.fillManagerInitializationFailed,
+                            fillToolManagerFailed: app.fillToolManagerInitializationFailed
+                        }
+                    };
+                    
+                    const success = appState.hasFillManager && appState.hasFillToolManager;
+                    
+                    this.addResult(
+                        'Full App Initialization',
+                        success ? 'pass' : 'fail',
+                        success ? 'App initialized with all managers' : 'App initialization failed for fill managers',
+                        appState
+                    );
+                    
+                    this.testApp = app;
+                    return success;
+                    
+                } catch (error) {
+                    this.addResult('Full App Initialization', 'fail', 'App initialization failed: ' + error.message, {
+                        stack: error.stack
+                    });
+                    return false;
+                }
+            }
+
+            async testContextMenuIntegration() {
+                try {
+                    if (!this.testApp) {
+                        this.addResult('Context Menu Integration', 'fail', 'App not available');
+                        return false;
+                    }
+                    
+                    // Test the handleFillTypeSelection method
+                    const testResult = this.testApp.handleFillTypeSelection('pattern');
+                    
+                    this.addResult(
+                        'Context Menu Integration',
+                        testResult ? 'pass' : 'fail',
+                        testResult ? 'handleFillTypeSelection works correctly' : 'handleFillTypeSelection failed'
+                    );
+                    
+                    return testResult;
+                    
+                } catch (error) {
+                    this.addResult('Context Menu Integration', 'fail', 'Context menu test failed: ' + error.message);
+                    return false;
+                }
+            }
+
+            generateDiagnosticReport() {
+                const report = document.getElementById('diagnosticReport');
+                const passedTests = this.results.filter(r => r.status === 'pass').length;
+                const failedTests = this.results.filter(r => r.status === 'fail').length;
+                const totalTests = this.results.filter(r => r.status !== 'info').length;
+                
+                let diagnosis = '';
+                let recommendations = [];
+                
+                if (failedTests === 0) {
+                    diagnosis = '✅ ALL SYSTEMS OPERATIONAL - Fill system should work correctly';
+                } else if (this.results.some(r => r.test === 'Script Loading' && r.status === 'fail')) {
+                    diagnosis = '❌ SCRIPT LOADING FAILURE - One or more JavaScript files failed to load';
+                    recommendations.push('Check browser console for 404 errors');
+                    recommendations.push('Verify all script files exist in correct directories');
+                    recommendations.push('Check web server is serving JavaScript files correctly');
+                } else if (this.results.some(r => r.test === 'FillManager Creation' && r.status === 'fail')) {
+                    diagnosis = '❌ FILLMANAGER INITIALIZATION FAILURE - Core fill system cannot start';
+                    recommendations.push('Check FillManager constructor for syntax errors');
+                    recommendations.push('Verify all dependencies are properly created');
+                    recommendations.push('Look for JavaScript syntax errors in FillManager.js');
+                } else if (this.results.some(r => r.test === 'Full App Initialization' && r.status === 'fail')) {
+                    diagnosis = '❌ APPLICATION INITIALIZATION FAILURE - Fill managers not created in main app';
+                    recommendations.push('Check ZXSpectrumPixelSmasher.js initialization code');
+                    recommendations.push('Verify dependency injection is working correctly');
+                    recommendations.push('Look for timing issues in initialization order');
+                } else {
+                    diagnosis = '⚠️ PARTIAL FAILURE - Some components working, others failing';
+                    recommendations.push('Review individual test results above');
+                    recommendations.push('Focus on first failing test as it may cause cascade failures');
+                }
+                
+                report.innerHTML = `
+                    <div class="section ${failedTests === 0 ? 'pass' : 'fail'}">
+                        <h4>📊 Test Summary</h4>
+                        <p><strong>Passed:</strong> ${passedTests}/${totalTests} tests</p>
+                        <p><strong>Failed:</strong> ${failedTests}/${totalTests} tests</p>
+                        
+                        <h4>🔍 Diagnosis</h4>
+                        <p>${diagnosis}</p>
+                        
+                        <h4>💡 Recommendations</h4>
+                        <ul>
+                            ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                        </ul>
+                        
+                        <h4>📋 Console Messages</h4>
+                        <p>Check the Console Output section above for detailed logging information.</p>
+                    </div>
+                `;
+            }
+
+            attemptAutoFix() {
+                this.addResult('Auto Fix', 'info', 'Attempting automated fixes...');
+                
+                // Auto-fix strategies based on common issues
+                const fixes = [];
+                
+                // Fix 1: Clear any cached/corrupted instances
+                try {
+                    if (window.app && window.app.fillManager === null) {
+                        fixes.push('Clearing corrupted app.fillManager reference');
+                        delete window.app.fillManager;
+                        delete window.app.fillManagerInitializationFailed;
+                    }
+                } catch (e) {
+                    fixes.push(`Fix attempt 1 failed: ${e.message}`);
+                }
+                
+                // Fix 2: Force garbage collection if available
+                try {
+                    if (window.gc) {
+                        window.gc();
+                        fixes.push('Forced garbage collection');
+                    }
+                } catch (e) {
+                    fixes.push('Garbage collection not available');
+                }
+                
+                // Fix 3: Recreate app instance
+                try {
+                    fixes.push('Attempting to create fresh app instance...');
+                    const newApp = new ZXSpectrumPixelSmasher();
+                    if (newApp.fillManager && newApp.fillToolManager) {
+                        window.app = newApp;
+                        fixes.push('✅ Successfully created new app with working fill managers');
+                    } else {
+                        fixes.push('❌ New app creation failed - managers still null');
+                    }
+                } catch (e) {
+                    fixes.push(`New app creation failed: ${e.message}`);
+                }
+                
+                this.addResult('Auto Fix', 'info', 'Auto-fix complete', fixes);
+                
+                // Re-run diagnosis after fixes
+                setTimeout(() => this.runCompleteDiagnosis(), 1000);
+            }
+
+            clearResults() {
+                this.results = [];
+                this.consoleMessages = [];
+                document.getElementById('testResults').innerHTML = '';
+                document.getElementById('consoleOutput').textContent = '';
+                document.getElementById('diagnosticReport').innerHTML = '';
+                document.getElementById('status').textContent = 'Results cleared. Ready for new diagnosis.';
+            }
+        }
+
+        // Global debugger instance
+        const autoDebugger = new AutoDebugger();
+
+        function runAutoDiagnosis() {
+            document.getElementById('status').textContent = 'Running comprehensive auto-diagnosis...';
+            autoDebugger.runCompleteDiagnosis().then(() => {
+                document.getElementById('status').textContent = 'Auto-diagnosis complete. Check results below.';
+            });
+        }
+
+        function attemptAutoFix() {
+            autoDebugger.attemptAutoFix();
+        }
+
+        function clearResults() {
+            autoDebugger.clearResults();
+        }
+
+        // Auto-start diagnosis when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                document.getElementById('status').textContent = 'Auto-starting diagnosis...';
+                runAutoDiagnosis();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

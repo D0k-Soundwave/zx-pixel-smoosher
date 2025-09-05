@@ -1,0 +1,105 @@
+# Dependabot configuration for ZX Pixel Smoosher
+# Automatically checks for updates to dependencies and GitHub Actions
+
+version: 2
+updates:
+  # Monitor GitHub Actions for security updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "D0k-Soundwave"
+    assignees:
+      - "D0k-Soundwave"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+
+  # Monitor for npm dependencies (if package.json is added in future)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "D0k-Soundwave"
+    assignees:
+      - "D0k-Soundwave"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    # Ignore specific packages if needed
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    # Group related updates
+    groups:
+      development-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "@types/*"
+          - "eslint*"
+          - "prettier*"
+          - "typescript"
+          - "webpack*"
+          - "vite*"
+      build-tools:
+        patterns:
+          - "rollup*"
+          - "babel*"
+          - "terser*"
+          - "postcss*"
+
+  # Monitor for Docker updates (if Dockerfile is added in future)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "D0k-Soundwave"
+    assignees:
+      - "D0k-Soundwave"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+
+  # Monitor for Python dependencies (if requirements.txt is added in future)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly" 
+      day: "thursday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "D0k-Soundwave"
+    assignees:
+      - "D0k-Soundwave"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"

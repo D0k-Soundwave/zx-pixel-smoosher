@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Fill System Directly</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        #output { background: #f0f0f0; padding: 10px; white-space: pre-wrap; }
+        .test { margin: 10px 0; padding: 5px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Fill System Test</h1>
+    <div id="tests"></div>
+    <div id="output"></div>
+
+    <!-- Load scripts in the exact same order as main app -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+
+    <script>
+        function addTest(name, success, message) {
+            const div = document.createElement('div');
+            div.className = `test ${success ? 'pass' : 'fail'}`;
+            div.textContent = `${success ? 'PASS' : 'FAIL'}: ${name} - ${message}`;
+            document.getElementById('tests').appendChild(div);
+        }
+
+        function log(msg) {
+            document.getElementById('output').textContent += msg + '\n';
+            console.log(msg);
+        }
+
+        try {
+            log('=== FILL SYSTEM DIRECT TEST ===');
+            
+            // Test 1: Script Loading
+            const scriptsLoaded = {
+                EventBus: typeof EventBus !== 'undefined',
+                FillManager: typeof FillManager !== 'undefined', 
+                FillToolManager: typeof FillToolManager !== 'undefined'
+            };
+            addTest('Script Loading', 
+                scriptsLoaded.EventBus && scriptsLoaded.FillManager && scriptsLoaded.FillToolManager,
+                JSON.stringify(scriptsLoaded));
+            
+            if (!scriptsLoaded.FillManager) {
+                throw new Error('FillManager not loaded');
+            }
+
+            // Test 2: Create Dependencies
+            const eventBus = new EventBus();
+            const memoryManager = new MemoryManager(eventBus, {});
+            
+            // Mock ColorManager like the real app
+            const colorManager = {
+                state: { ink: 0, paper: 7, bright: false, flash: false },
+                setInk: function(color) { this.state.ink = color; },
+                setPaper: function(color) { this.state.paper = color; },
+                getState: function() { return this.state; }
+            };
+            
+            // Mock StateManager like the real app  
+            const stateManager = {
+                state: {
+                    pixels: Array(192).fill().map(() => new Uint8Array(256)),
+                    attributes: Array(24).fill().map(() => Array(32).fill({ink: 0, paper: 7, bright: false, flash: false}))
+                },
+                getState: function() { return this.state; },
+                saveState: function() { log('StateManager: saveState called'); },
+                setPixels: function(pixels) { this.state.pixels = pixels; },
+                setAttributes: function(attrs) { this.state.attributes = attrs; }
+            };
+            
+            addTest('Dependencies Created', true, 'EventBus, ColorManager, StateManager mocked');
+
+            // Test 3: Create FillManager
+            log('Creating FillManager...');
+            const fillManager = new FillManager(eventBus, stateManager, colorManager, memoryManager);
+            const fillManagerMethods = {
+                setFillType: typeof fillManager.setFillType === 'function',
+                fill: typeof fillManager.fill === 'function',
+                getAvailableFillTypes: typeof fillManager.getAvailableFillTypes === 'function'
+            };
+            addTest('FillManager Creation', 
+                fillManagerMethods.setFillType && fillManagerMethods.fill && fillManagerMethods.getAvailableFillTypes,
+                JSON.stringify(fillManagerMethods));
+            
+            const availableFillTypes = fillManager.getAvailableFillTypes();
+            log('Available fill types: ' + availableFillTypes.join(', '));
+            
+            // Test 4: Create FillToolManager
+            log('Creating FillToolManager...');
+            const fillToolManager = new FillToolManager(eventBus, fillManager, colorManager);
+            const fillToolManagerMethods = {
+                setFillType: typeof fillToolManager.setFillType === 'function',
+                getCurrentFillType: typeof fillToolManager.getCurrentFillType === 'function',
+                activateFillTool: typeof fillToolManager.activateFillTool === 'function'
+            };
+            addTest('FillToolManager Creation',
+                fillToolManagerMethods.setFillType && fillToolManagerMethods.getCurrentFillType,
+                JSON.stringify(fillToolManagerMethods));
+
+            // Test 5: Test Pattern Fill Functionality
+            log('Testing pattern fill...');
+            try {
+                fillManager.setFillType('pattern', { patternName: 'dots', scale: 1 });
+                fillManager.fill({ x: 10, y: 10, erase: false, type: 'pattern' });
+                addTest('Pattern Fill Execution', true, 'Pattern fill executed without error');
+            } catch (err) {
+                addTest('Pattern Fill Execution', false, err.message);
+            }
+
+            // Test 6: Integration Test
+            log('Testing integration...');
+            try {
+                fillToolManager.setFillType('gradient');
+                const currentType = fillToolManager.getCurrentFillType();
+                addTest('Integration Test', currentType === 'gradient', `Got fill type: ${currentType}`);
+            } catch (err) {
+                addTest('Integration Test', false, err.message);
+            }
+
+            log('\n=== ALL TESTS COMPLETE ===');
+
+        } catch (error) {
+            log('FATAL ERROR: ' + error.message);
+            log('Stack: ' + error.stack);
+            addTest('Overall Test', false, error.message);
+        }
+    </script>
+</body>
+</html>

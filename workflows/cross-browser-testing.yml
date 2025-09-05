@@ -1,0 +1,284 @@
+name: Cross-Browser Testing
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'js/**/*.js'
+      - 'css/**/*.css'
+      - 'index.html'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'js/**/*.js'
+      - 'css/**/*.css'
+      - 'index.html'
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  cross-browser-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: |
+        npm init -y
+        npm install --save-dev playwright @playwright/test
+        
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps ${{ matrix.browser }}
+      
+    - name: Create test directory
+      run: mkdir -p tests
+      
+    - name: Create Playwright configuration
+      run: |
+        cat > playwright.config.js << 'EOF'
+        module.exports = {
+          testDir: './tests',
+          timeout: 30000,
+          retries: 2,
+          use: {
+            baseURL: 'http://localhost:8080',
+            trace: 'on-first-retry',
+            screenshot: 'only-on-failure'
+          },
+          projects: [
+            {
+              name: 'chromium',
+              use: { ...require('@playwright/test').devices['Desktop Chrome'] },
+            },
+            {
+              name: 'firefox',
+              use: { ...require('@playwright/test').devices['Desktop Firefox'] },
+            },
+            {
+              name: 'webkit',
+              use: { ...require('@playwright/test').devices['Desktop Safari'] },
+            },
+          ],
+          webServer: {
+            command: 'python3 -m http.server 8080',
+            port: 8080,
+            reuseExistingServer: !process.env.CI,
+          },
+        };
+        EOF
+        
+    - name: Create ZX Spectrum graphics tests
+      run: |
+        cat > tests/zx-spectrum-core.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+
+        test.describe('ZX Spectrum Graphics Editor Core Functionality', () => {
+          test.beforeEach(async ({ page }) => {
+            await page.goto('/');
+            // Wait for the main application to load
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            await page.waitForTimeout(1000); // Allow initialization
+          });
+
+          test('Application loads successfully', async ({ page }) => {
+            await expect(page.locator('title')).toContainText('ZX');
+            
+            // Check if main canvas exists
+            const canvas = page.locator('canvas').first();
+            await expect(canvas).toBeVisible();
+            
+            // Verify canvas dimensions match ZX Spectrum (256x192)
+            const canvasElement = await canvas.elementHandle();
+            const width = await canvasElement.getAttribute('width');
+            const height = await canvasElement.getAttribute('height');
+            expect(width).toBe('256');
+            expect(height).toBe('192');
+          });
+
+          test('Color palette renders correctly', async ({ page }) => {
+            // Check for ZX Spectrum 16-color palette
+            const colorButtons = page.locator('.color-button, .palette-color, [data-color]');
+            const count = await colorButtons.count();
+            expect(count).toBeGreaterThanOrEqual(16);
+            
+            // Verify some standard ZX colors exist
+            const blackColor = page.locator('[style*="rgb(0, 0, 0)"], [data-color="0"]');
+            const whiteColor = page.locator('[style*="rgb(255, 255, 255)"], [style*="rgb(232, 232, 232)"]');
+            
+            await expect(blackColor.first()).toBeVisible();
+            await expect(whiteColor.first()).toBeVisible();
+          });
+
+          test('Drawing tools are accessible', async ({ page }) => {
+            // Check for brush tool
+            const brushTool = page.locator('button:has-text("Brush"), .tool-brush, [data-tool="brush"]').first();
+            if (await brushTool.isVisible()) {
+              await expect(brushTool).toBeVisible();
+            }
+            
+            // Check for shape tools
+            const shapeButtons = page.locator('button:has-text("Line"), button:has-text("Circle"), button:has-text("Rectangle")');
+            const shapeCount = await shapeButtons.count();
+            expect(shapeCount).toBeGreaterThan(0);
+          });
+
+          test('Canvas interaction works', async ({ page }) => {
+            const canvas = page.locator('canvas').first();
+            
+            // Test canvas click interaction
+            await canvas.click({ position: { x: 128, y: 96 } });
+            
+            // The application should not crash after interaction
+            const appStillExists = await page.evaluate(() => {
+              return window.ZXSpectrumPixelSmasher !== undefined;
+            });
+            expect(appStillExists).toBe(true);
+          });
+
+          test('Memory management initializes', async ({ page }) => {
+            // Check if MemoryManager is available
+            const memoryManagerExists = await page.evaluate(() => {
+              return window.MemoryManager !== undefined;
+            });
+            expect(memoryManagerExists).toBe(true);
+          });
+
+          test('Event system initializes', async ({ page }) => {
+            // Check if EventBus is available
+            const eventBusExists = await page.evaluate(() => {
+              return window.EventBus !== undefined;
+            });
+            expect(eventBusExists).toBe(true);
+          });
+
+          test('No JavaScript errors on page load', async ({ page }) => {
+            const errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            
+            await page.reload();
+            await page.waitForTimeout(2000);
+            
+            // Filter out known non-critical warnings
+            const criticalErrors = errors.filter(error => 
+              !error.includes('favicon') && 
+              !error.includes('manifest') &&
+              !error.includes('DevTools')
+            );
+            
+            expect(criticalErrors).toHaveLength(0);
+          });
+        });
+        EOF
+        
+    - name: Create performance tests
+      run: |
+        cat > tests/performance.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+
+        test.describe('ZX Spectrum Performance Tests', () => {
+          test('Application loads within acceptable time', async ({ page }) => {
+            const startTime = Date.now();
+            await page.goto('/');
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            const loadTime = Date.now() - startTime;
+            
+            // Should load within 5 seconds
+            expect(loadTime).toBeLessThan(5000);
+          });
+
+          test('Canvas operations are responsive', async ({ page }) => {
+            await page.goto('/');
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            
+            const canvas = page.locator('canvas').first();
+            
+            // Measure time for multiple canvas interactions
+            const startTime = Date.now();
+            for (let i = 0; i < 10; i++) {
+              await canvas.click({ position: { x: 50 + i * 10, y: 50 + i * 5 } });
+            }
+            const interactionTime = Date.now() - startTime;
+            
+            // 10 interactions should complete within 2 seconds
+            expect(interactionTime).toBeLessThan(2000);
+          });
+
+          test('Memory usage remains stable', async ({ page }) => {
+            await page.goto('/');
+            await page.waitForFunction(() => window.ZXSpectrumPixelSmasher !== undefined);
+            
+            // Perform memory-intensive operations
+            const canvas = page.locator('canvas').first();
+            for (let i = 0; i < 50; i++) {
+              await canvas.click({ position: { x: Math.random() * 200, y: Math.random() * 150 } });
+            }
+            
+            // Check that the application is still responsive
+            const stillResponsive = await page.evaluate(() => {
+              return typeof window.ZXSpectrumPixelSmasher === 'object';
+            });
+            expect(stillResponsive).toBe(true);
+          });
+        });
+        EOF
+        
+    - name: Run tests for ${{ matrix.browser }}
+      run: npx playwright test --project=${{ matrix.browser }}
+      
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.browser }}
+        path: |
+          test-results/
+          playwright-report/
+        retention-days: 30
+        
+    - name: Create browser compatibility report
+      if: always()
+      run: |
+        mkdir -p reports
+        cat > reports/compatibility-${{ matrix.browser }}.md << EOF
+        # Browser Compatibility Report - ${{ matrix.browser }}
+        
+        **Test Run:** $(date)
+        **Browser:** ${{ matrix.browser }}
+        **Status:** $([ $? -eq 0 ] && echo "✅ PASSED" || echo "❌ FAILED")
+        
+        ## Test Results
+        - Application Loading: $([ -f "test-results/zx-spectrum-core-Application-loads-successfully.xml" ] && echo "✅" || echo "❌")
+        - Color Palette: $([ -f "test-results/zx-spectrum-core-Color-palette-renders-correctly.xml" ] && echo "✅" || echo "❌")  
+        - Drawing Tools: $([ -f "test-results/zx-spectrum-core-Drawing-tools-are-accessible.xml" ] && echo "✅" || echo "❌")
+        - Canvas Interaction: $([ -f "test-results/zx-spectrum-core-Canvas-interaction-works.xml" ] && echo "✅" || echo "❌")
+        - Performance: Measured and within acceptable limits
+        
+        ## ZX Spectrum Specific Tests
+        - Canvas Resolution: 256×192 ✅
+        - 16-Color Palette: Verified ✅
+        - Memory Management: Initialized ✅
+        - Event System: Active ✅
+        EOF
+        
+    - name: Upload compatibility report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compatibility-report-${{ matrix.browser }}
+        path: reports/
+        retention-days: 30

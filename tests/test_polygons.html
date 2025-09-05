@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Polygon Test</title>
+</head>
+<body>
+    <h1>Polygon Generation Test</h1>
+    <div id="output"></div>
+    
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    <script>
+        function testPolygons() {
+            const generator = new ShapeGenerator();
+            const bounds = { centerX: 100, centerY: 100, radius: 50 };
+            
+            console.log('Testing Pentagon...');
+            const pentagon = generator.generateShape('pentagon', bounds);
+            console.log('Pentagon points:', pentagon.length, pentagon.slice(0, 5));
+            
+            console.log('Testing Hexagon...');
+            const hexagon = generator.generateShape('hexagon', bounds);
+            console.log('Hexagon points:', hexagon.length, hexagon.slice(0, 5));
+            
+            console.log('Testing Octagon...');
+            const octagon = generator.generateShape('octagon', bounds);
+            console.log('Octagon points:', octagon.length, octagon.slice(0, 5));
+            
+            // Compare first few points to see if they're different
+            const output = document.getElementById('output');
+            const p1 = pentagon.slice(0, 5);
+            const h1 = hexagon.slice(0, 5);
+            const o1 = octagon.slice(0, 5);
+            
+            output.innerHTML = `
+                <h2>Results (Fix Verification):</h2>
+                <p><strong>Pentagon (${pentagon.length} points):</strong> ${JSON.stringify(p1)}</p>
+                <p><strong>Hexagon (${hexagon.length} points):</strong> ${JSON.stringify(h1)}</p>
+                <p><strong>Octagon (${octagon.length} points):</strong> ${JSON.stringify(o1)}</p>
+                <h3>Analysis:</h3>
+                <p>Pentagon vs Hexagon same? ${JSON.stringify(p1) === JSON.stringify(h1) ? 'YES (BAD)' : 'NO (GOOD)'}</p>
+                <p>Hexagon vs Octagon same? ${JSON.stringify(h1) === JSON.stringify(o1) ? 'YES (BAD)' : 'NO (GOOD)'}</p>
+                <p>Pentagon vs Octagon same? ${JSON.stringify(p1) === JSON.stringify(o1) ? 'YES (BAD)' : 'NO (GOOD)'}</p>
+            `;
+        }
+        
+        // Run test when page loads
+        window.onload = testPolygons;
+    </script>
+</body>
+</html>

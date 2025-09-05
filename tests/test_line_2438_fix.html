@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Line 2438 Fix Validation</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #6b7280;
+        }
+        .pass { background: #064e3b; border-left-color: #10b981; }
+        .fail { background: #7f1d1d; border-left-color: #ef4444; }
+        .warn { background: #78350f; border-left-color: #f59e0b; }
+        .info { background: #1e3a8a; border-left-color: #3b82f6; }
+        
+        button {
+            margin: 10px 5px;
+            padding: 12px 20px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        button:hover { background: #4338ca; }
+        
+        .fill-context-menu {
+            background: #374151;
+            border: 1px solid #6b7280;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px;
+            display: none;
+        }
+        .fill-context-menu.active { display: block; }
+        
+        .fill-menu-item {
+            padding: 8px 12px;
+            margin: 2px 0;
+            background: #4b5563;
+            border-radius: 4px;
+            cursor: pointer;
+            color: white;
+        }
+        .fill-menu-item:hover { background: #6b7280; }
+        .fill-menu-item.active { background: #4f46e5; }
+    </style>
+</head>
+<body>
+    <h1>Line 2438 Fix Validation Test</h1>
+    <p>This test validates that the "Advanced fill tools not available" error on line 2438 is completely fixed.</p>
+    
+    <div class="test-result info">
+        <strong>Original Error Location:</strong> ZXSpectrumPixelSmasher.js:2438<br>
+        <strong>Error Message:</strong> "Advanced fill tools not available - using flood fill"<br>
+        <strong>Root Cause:</strong> Context menu handlers accessing null fillManager/fillToolManager instances
+    </div>
+    
+    <h2>Test Controls</h2>
+    <button onclick="runFullTest()">🚀 Run Complete Test Suite</button>
+    <button onclick="simulateOriginalError()">💥 Simulate Original Error</button>
+    <button onclick="testContextMenuInteraction()">🎯 Test Context Menu</button>
+    <button onclick="clearResults()">🧹 Clear Results</button>
+    
+    <!-- Mock fill context menu for testing -->
+    <div id="fill-context-menu" class="fill-context-menu">
+        <div class="fill-menu-item" data-fill-type="flood">🌊 Flood Fill</div>
+        <div class="fill-menu-item" data-fill-type="pattern">🔲 Pattern Fill</div>
+        <div class="fill-menu-item" data-fill-type="gradient">🌈 Gradient Fill</div>
+        <div class="fill-menu-item" data-fill-type="smart">🧠 Smart Fill</div>
+        <div class="fill-menu-item" data-fill-type="texture">🎨 Texture Fill</div>
+        <div class="fill-menu-item" data-fill-type="fractal">❄ Fractal Fill</div>
+    </div>
+    
+    <h2>Test Results</h2>
+    <div id="test-results"></div>
+
+    <!-- Load all required scripts -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    <script src="js/ZXSpectrumPixelSmasher.js"></script>
+    
+    <script>
+        let app = null;
+        let testResults = [];
+        let originalConsoleWarn = console.warn;
+        let warningCaptured = false;
+        let capturedWarning = '';
+        
+        function addResult(testName, passed, details = '') {
+            const result = {
+                test: testName,
+                passed,
+                details,
+                timestamp: new Date().toLocaleString()
+            };
+            testResults.push(result);
+            updateResultsDisplay();
+        }
+        
+        function updateResultsDisplay() {
+            const container = document.getElementById('test-results');
+            container.innerHTML = testResults.map(result => {
+                const className = result.passed ? 'pass' : 'fail';
+                const icon = result.passed ? '✅' : '❌';
+                return `
+                    <div class="test-result ${className}">
+                        <strong>${icon} ${result.test}</strong><br>
+                        ${result.details}<br>
+                        <small>Completed: ${result.timestamp}</small>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function clearResults() {
+            testResults = [];
+            updateResultsDisplay();
+        }
+        
+        function captureWarnings() {
+            warningCaptured = false;
+            capturedWarning = '';
+            console.warn = function(...args) {
+                const message = args.join(' ');
+                if (message.includes('Advanced fill tools not available')) {
+                    warningCaptured = true;
+                    capturedWarning = message;
+                }
+                originalConsoleWarn.apply(console, args);
+            };
+        }
+        
+        function restoreWarnings() {
+            console.warn = originalConsoleWarn;
+        }
+        
+        function runFullTest() {
+            clearResults();
+            addResult('Test Suite Started', true, 'Running comprehensive validation of line 2438 fix');
+            
+            // Test 1: Normal initialization
+            try {
+                app = new ZXSpectrumPixelSmasher();
+                addResult('Application Initialization', true, `fillManager: ${!!app.fillManager}, fillToolManager: ${!!app.fillToolManager}`);
+            } catch (error) {
+                addResult('Application Initialization', false, `Error: ${error.message}`);
+                return;
+            }
+            
+            // Test 2: Manager availability
+            const managersAvailable = !!(app.fillManager || app.fillToolManager);
+            addResult('Fill Managers Available', managersAvailable, `At least one manager is available for fill operations`);
+            
+            // Test 3: Context menu handler setup
+            try {
+                const menu = document.getElementById('fill-context-menu');
+                app.setupFillContextMenuHandlers(menu);
+                addResult('Context Menu Handler Setup', true, 'setupFillContextMenuHandlers completed without error');
+            } catch (error) {
+                addResult('Context Menu Handler Setup', false, `Error: ${error.message}`);
+            }
+            
+            // Test 4: Fill type selection (this is the exact line 2438 scenario)
+            const fillTypes = ['flood', 'pattern', 'gradient', 'smart', 'texture', 'fractal'];
+            let allSuccessful = true;
+            let results = [];
+            
+            fillTypes.forEach(fillType => {
+                captureWarnings();
+                try {
+                    const success = app.handleFillTypeSelection(fillType);
+                    results.push(`${fillType}: ${success ? 'SUCCESS' : 'FALLBACK'}`);
+                    if (!success && !warningCaptured) {
+                        // If it failed but no warning was captured, that's unexpected
+                        allSuccessful = false;
+                    }
+                } catch (error) {
+                    results.push(`${fillType}: ERROR (${error.message})`);
+                    allSuccessful = false;
+                }
+                restoreWarnings();
+            });
+            
+            addResult('Fill Type Selection', allSuccessful, `Results: ${results.join(', ')}`);
+            
+            // Test 5: Verify no "Advanced fill tools not available" warning appears
+            captureWarnings();
+            const menu = document.getElementById('fill-context-menu');
+            const menuItems = menu.querySelectorAll('.fill-menu-item');
+            
+            // Simulate actual context menu clicks
+            menuItems.forEach(item => {
+                item.click();
+            });
+            
+            const noWarningAppeared = !warningCaptured;
+            addResult('No "Advanced fill tools not available" Warning', noWarningAppeared, 
+                noWarningAppeared ? 'No deprecated warning detected' : `Warning captured: ${capturedWarning}`);
+            
+            restoreWarnings();
+            
+            addResult('Test Suite Completed', true, `All tests completed. ${testResults.filter(r => r.passed).length - 2}/${testResults.length - 2} tests passed`);
+        }
+        
+        function simulateOriginalError() {
+            addResult('Simulating Original Error Conditions', true, 'Creating conditions that would trigger line 2438');
+            
+            // Create an app instance with deliberately broken managers
+            try {
+                app = new ZXSpectrumPixelSmasher();
+                
+                // Force managers to null to simulate original error condition
+                app.fillManager = null;
+                app.fillToolManager = null;
+                
+                // Now test the old behavior vs new behavior
+                captureWarnings();
+                
+                const success = app.handleFillTypeSelection('pattern');
+                
+                const hasWarning = warningCaptured;
+                const warningIsInformative = capturedWarning.includes('Advanced fill tools not available') &&
+                                           !capturedWarning.includes('using flood fill');
+                
+                addResult('Error Simulation', true, 
+                    `With null managers: success=${success}, warning=${hasWarning}, informative=${warningIsInformative}`);
+                
+                if (hasWarning) {
+                    addResult('Warning Quality', warningIsInformative, 
+                        `Warning message: "${capturedWarning}"`);
+                }
+                
+                restoreWarnings();
+                
+            } catch (error) {
+                addResult('Error Simulation', false, `Unexpected error: ${error.message}`);
+            }
+        }
+        
+        function testContextMenuInteraction() {
+            if (!app) {
+                app = new ZXSpectrumPixelSmasher();
+            }
+            
+            addResult('Context Menu Interaction Test', true, 'Testing actual DOM interactions');
+            
+            const menu = document.getElementById('fill-context-menu');
+            menu.classList.add('active'); // Show menu
+            
+            // Set up handlers
+            app.setupFillContextMenuHandlers(menu);
+            
+            // Test each menu item
+            const menuItems = menu.querySelectorAll('.fill-menu-item');
+            let clicksSuccessful = 0;
+            
+            captureWarnings();
+            
+            menuItems.forEach(item => {
+                try {
+                    item.click();
+                    clicksSuccessful++;
+                } catch (error) {
+                    console.error('Click failed:', error);
+                }
+            });
+            
+            const allClicksWorked = clicksSuccessful === menuItems.length;
+            const noDeprecatedWarnings = !warningCaptured;
+            
+            addResult('Context Menu Clicks', allClicksWorked, 
+                `${clicksSuccessful}/${menuItems.length} clicks successful`);
+                
+            addResult('No Deprecated Warnings', noDeprecatedWarnings, 
+                noDeprecatedWarnings ? 'All interactions clean' : `Warning: ${capturedWarning}`);
+            
+            restoreWarnings();
+            menu.classList.remove('active'); // Hide menu
+        }
+        
+        // Auto-run on page load
+        window.addEventListener('load', () => {
+            addResult('Page Loaded', true, 'Line 2438 fix validation test ready');
+        });
+    </script>
+</body>
+</html>

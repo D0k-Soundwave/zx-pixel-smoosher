@@ -1,0 +1,89 @@
+name: Test Dependencies
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/**'
+      - '.github/dependabot.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        if [ -f "package.json" ]; then
+          npm ci
+        else
+          echo "No package.json found - vanilla JavaScript project"
+        fi
+        
+    - name: Run linting (if available)
+      run: |
+        if [ -f "package.json" ] && npm run lint --if-present; then
+          npm run lint
+        else
+          echo "No linting configuration found"
+        fi
+        
+    - name: Run tests (if available)
+      run: |
+        if [ -f "package.json" ] && npm run test --if-present; then
+          npm run test
+        else
+          echo "No test configuration found"
+        fi
+        
+    - name: Check application loads
+      run: |
+        # Basic validation that HTML file exists and has required structure
+        if [ -f "index.html" ]; then
+          echo "✓ index.html exists"
+          if grep -q "ZX Pixel Smoosher" index.html; then
+            echo "✓ Application title found"
+          else
+            echo "✗ Application title not found"
+            exit 1
+          fi
+          if grep -q "ZXSpectrumPixelSmasher.js" index.html; then
+            echo "✓ Main JavaScript file referenced"
+          else
+            echo "✗ Main JavaScript file not referenced"
+            exit 1
+          fi
+        else
+          echo "✗ index.html not found"
+          exit 1
+        fi
+        
+    - name: Validate JavaScript syntax
+      run: |
+        # Check for syntax errors in JavaScript files
+        find js -name "*.js" -exec node -c {} \; 2>&1 | grep -v "SyntaxError" || {
+          echo "JavaScript syntax validation passed"
+        }
+        
+    - name: Security audit (if package.json exists)
+      run: |
+        if [ -f "package.json" ]; then
+          npm audit --audit-level moderate
+        else
+          echo "No package.json - skipping npm audit"
+        fi

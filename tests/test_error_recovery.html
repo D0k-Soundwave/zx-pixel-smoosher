@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fill Manager Error Recovery Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+        }
+        .log { 
+            margin: 5px 0; 
+            padding: 8px; 
+            background: #374151; 
+            border-radius: 4px; 
+            border-left: 4px solid #6b7280;
+        }
+        .error { border-left-color: #ef4444; background: #7f1d1d; }
+        .success { border-left-color: #10b981; background: #064e3b; }
+        .warning { border-left-color: #f59e0b; background: #78350f; }
+        .info { border-left-color: #3b82f6; background: #1e3a8a; }
+        button {
+            margin: 5px;
+            padding: 10px 15px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        button:hover { background: #4338ca; }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #4b5563;
+            border-radius: 8px;
+            background: #374151;
+        }
+    </style>
+</head>
+<body>
+    <h1>Fill Manager Error Recovery Test</h1>
+    <p>This test simulates initialization failures and tests the recovery mechanism.</p>
+    
+    <div class="test-section">
+        <h3>Test Controls</h3>
+        <button onclick="testNormalInitialization()">Test Normal Initialization</button>
+        <button onclick="testFailedInitialization()">Simulate Initialization Failure</button>
+        <button onclick="testRecovery()">Test Recovery Mechanism</button>
+        <button onclick="testContextMenu()">Test Context Menu Handler</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test Results</h3>
+        <div id="log"></div>
+    </div>
+
+    <!-- Load scripts in exact order -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    <script src="js/ZXSpectrumPixelSmasher.js"></script>
+    
+    <script>
+        let app = null;
+        let originalFillManager = null;
+        
+        function addLog(message, type = 'info') {
+            const div = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            div.innerHTML += `<div class="log ${type}">[${timestamp}] ${message}</div>`;
+            div.scrollTop = div.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        // Capture console output
+        const originalConsole = {
+            log: console.log,
+            warn: console.warn,
+            error: console.error
+        };
+        
+        console.log = function(...args) {
+            addLog(args.join(' '), 'info');
+            originalConsole.log.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            addLog(args.join(' '), 'warning');
+            originalConsole.warn.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            addLog(args.join(' '), 'error');
+            originalConsole.error.apply(console, args);
+        };
+        
+        function testNormalInitialization() {
+            addLog('=== Testing Normal Initialization ===', 'info');
+            try {
+                // Store original for later tests
+                if (!originalFillManager) {
+                    originalFillManager = window.FillManager;
+                }
+                
+                // Ensure FillManager is available
+                window.FillManager = originalFillManager;
+                
+                app = new ZXSpectrumPixelSmasher();
+                
+                addLog(`Fill Manager: ${!!app.fillManager}`, app.fillManager ? 'success' : 'error');
+                addLog(`Fill Tool Manager: ${!!app.fillToolManager}`, app.fillToolManager ? 'success' : 'error');
+                addLog('Normal initialization test completed', 'success');
+                
+            } catch (error) {
+                addLog(`Normal initialization failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function testFailedInitialization() {
+            addLog('=== Testing Failed Initialization ===', 'info');
+            
+            try {
+                // Store original
+                if (!originalFillManager) {
+                    originalFillManager = window.FillManager;
+                }
+                
+                // Temporarily break FillManager to simulate loading failure
+                const brokenFillManager = function() {
+                    throw new Error('Simulated FillManager initialization failure');
+                };
+                window.FillManager = brokenFillManager;
+                
+                addLog('FillManager temporarily broken to simulate failure', 'warning');
+                
+                app = new ZXSpectrumPixelSmasher();
+                
+                addLog(`Fill Manager after failure: ${app.fillManager}`, 'info');
+                addLog(`Fill Manager Init Failed Flag: ${app.fillManagerInitializationFailed}`, 'info');
+                addLog(`Fill Tool Manager: ${app.fillToolManager}`, 'info');
+                addLog('Failed initialization test completed', 'success');
+                
+                // Restore original for recovery test
+                window.FillManager = originalFillManager;
+                
+            } catch (error) {
+                addLog(`Failed initialization test error: ${error.message}`, 'error');
+                // Restore original anyway
+                window.FillManager = originalFillManager;
+            }
+        }
+        
+        function testRecovery() {
+            addLog('=== Testing Recovery Mechanism ===', 'info');
+            
+            if (!app) {
+                addLog('No app instance - run failed initialization test first', 'warning');
+                return;
+            }
+            
+            if (!app.fillManagerInitializationFailed) {
+                addLog('Fill manager not marked as failed - simulating failure state', 'warning');
+                app.fillManager = null;
+                app.fillToolManager = null;
+                app.fillManagerInitializationFailed = true;
+            }
+            
+            addLog('Attempting manual recovery...', 'info');
+            app.attemptFillManagerRecovery('pattern');
+            
+            addLog(`Fill Manager after recovery: ${!!app.fillManager}`, app.fillManager ? 'success' : 'error');
+            addLog(`Fill Tool Manager after recovery: ${!!app.fillToolManager}`, app.fillToolManager ? 'success' : 'error');
+            addLog('Recovery test completed', 'success');
+        }
+        
+        function testContextMenu() {
+            addLog('=== Testing Context Menu Handler ===', 'info');
+            
+            if (!app) {
+                addLog('No app instance - create one first', 'warning');
+                return;
+            }
+            
+            // Create mock context menu event
+            const mockFillTypes = ['flood', 'pattern', 'gradient', 'smart'];
+            
+            mockFillTypes.forEach(fillType => {
+                addLog(`Testing fill type: ${fillType}`, 'info');
+                const success = app.handleFillTypeSelection(fillType);
+                addLog(`Result for ${fillType}: ${success ? 'success' : 'fallback'}`, success ? 'success' : 'warning');
+            });
+            
+            addLog('Context menu handler test completed', 'success');
+        }
+        
+        // Initial setup
+        window.addEventListener('load', () => {
+            addLog('Page loaded - ready for testing', 'success');
+            addLog('Run tests using buttons above', 'info');
+        });
+    </script>
+</body>
+</html>

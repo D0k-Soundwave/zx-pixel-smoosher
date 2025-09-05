@@ -1,0 +1,42 @@
+{
+  "name": "zx-pixel-smoosher",
+  "version": "1.0.0",
+  "description": "ZX Spectrum graphics editor with authentic retro constraints and modern functionality",
+  "main": "js/ZXSpectrumPixelSmasher.js",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "dev": "python3 -m http.server 8080",
+    "test": "echo \"No tests configured yet\" && exit 0",
+    "lint": "echo \"No linting configured yet\" && exit 0"
+  },
+  "keywords": [
+    "zx-spectrum",
+    "pixel-art",
+    "graphics-editor",
+    "retro",
+    "8-bit",
+    "javascript",
+    "canvas",
+    "web-app"
+  ],
+  "author": "D0k^RA",
+  "license": "GPL-3.0",
+  "homepage": "https://github.com/D0k-Soundwave/ZX-Pixel-Smoosher",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/D0k-Soundwave/ZX-Pixel-Smoosher.git"
+  },
+  "bugs": {
+    "url": "https://github.com/D0k-Soundwave/ZX-Pixel-Smoosher/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "browserslist": [
+    "defaults",
+    "not IE 11",
+    "not op_mini all"
+  ],
+  "devDependencies": {},
+  "dependencies": {}
+}

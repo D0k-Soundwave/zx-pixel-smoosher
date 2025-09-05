@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZX Pixel Smoosher - Retro Graphics Editor</title>
+    <meta name="description" content="ZX Spectrum Graphics Editor">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Skip Link for Accessibility -->
+    <a href="#canvas" class="skip-link">Skip to main canvas</a>
+
+    <!-- Error Modal -->
+    <div id="errorModal" class="error-modal" role="dialog" aria-labelledby="errorTitle" aria-describedby="errorMessage">
+        <div class="error-content">
+            <header class="error-title">
+                <span aria-hidden="true">⚠</span>
+                <h2 id="errorTitle">Error</h2>
+            </header>
+            <main id="errorMessage" class="error-message"></main>
+            <footer class="error-actions">
+                <button class="btn" onclick="app.recoverFromError()">Recover</button>
+                <button class="btn primary" onclick="app.hideError()">Continue</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Application Header -->
+    <header class="header" role="banner">
+        <div class="header-title">
+            <h1>ZX Pixel Smoosher</h1>
+        </div>
+        
+        <nav class="header-actions" role="navigation" aria-label="Main actions">
+            <!-- File Operations -->
+            <div class="action-group file-actions">
+                <div class="tooltip">
+                    <button class="btn primary" onclick="if(window.app && window.app.clearCanvas) { window.app.clearCanvas(); }" title="New blank canvas" aria-describedby="new-tooltip">
+                        <span class="file-icon-new" aria-hidden="true"></span>
+                        <span>New</span>
+                    </button>
+                    <span class="tooltiptext" id="new-tooltip">Create fresh canvas</span>
+                </div>
+                
+                <div class="tooltip">
+                    <button class="btn" onclick="app.loadFile()" title="Load file" aria-describedby="load-tooltip">
+                        <span class="file-icon-load" aria-hidden="true"></span>
+                        <span>Load</span>
+                    </button>
+                    <span class="tooltiptext" id="load-tooltip">Load images or SCR files</span>
+                </div>
+            </div>
+
+            <!-- Export Operations -->
+            <div class="action-group export-actions">
+                <div class="tooltip">
+                    <button class="btn" onclick="app.saveImage()" title="Export PNG" aria-describedby="png-tooltip">
+                        <span class="file-icon-save" aria-hidden="true"></span>
+                        <span>PNG</span>
+                    </button>
+                    <span class="tooltiptext" id="png-tooltip">Export as PNG image</span>
+                </div>
+                
+                <div class="tooltip">
+                    <button class="btn" onclick="app.saveSCR()" title="Save SCR" aria-describedby="scr-tooltip">
+                        <span class="file-icon-save" aria-hidden="true"></span>
+                        <span>SCR</span>
+                    </button>
+                    <span class="tooltiptext" id="scr-tooltip">Save ZX Spectrum format</span>
+                </div>
+                
+                <div class="tooltip">
+                    <button class="btn" onclick="app.exportASM()" title="Export ASM" aria-describedby="asm-tooltip">
+                        <span class="file-icon-save" aria-hidden="true"></span>
+                        <span>ASM</span>
+                    </button>
+                    <span class="tooltiptext" id="asm-tooltip">Export Z80 assembly</span>
+                </div>
+            </div>
+
+            <!-- Edit Operations -->
+            <div class="action-group edit-actions">
+                <button class="btn" onclick="app.undo()" title="Undo (Ctrl+Z)" aria-describedby="undo-tooltip">
+                    <span class="edit-icon-undo" aria-hidden="true"></span>
+                    <span>Undo</span>
+                </button>
+                
+                <button class="btn" onclick="app.redo()" title="Redo (Ctrl+Shift+Z)" aria-describedby="redo-tooltip">
+                    <span class="edit-icon-redo" aria-hidden="true"></span>
+                    <span>Redo</span>
+                </button>
+            </div>
+
+
+            <!-- System Actions -->
+            <div class="action-group system-actions">
+                <button class="btn danger" onclick="if(window.app && window.app.safeReset) { window.app.safeReset(); }" title="Reset">
+                    <span class="edit-icon-reset" aria-hidden="true"></span>
+                    <span>Reset</span>
+                </button>
+                
+                <button class="btn secondary" onclick="app.compact()" title="Manual compact - optimize memory">
+                    <span class="edit-icon-compact" aria-hidden="true"></span>
+                    <span>Compact</span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Application -->
+    <main class="main" role="application" aria-label="ZX Spectrum Graphics Editor">
+        <!-- Sidebar with Tools -->
+        <aside class="sidebar" role="complementary" aria-label="Tool sidebar">
+            <!-- Performance Warning -->
+            <div id="perfWarning" class="perf-warning" role="alert" aria-live="polite">
+                ⚠ Large file! Performance may be affected.
+            </div>
+
+            <!-- Drawing Tools Section -->
+            <section class="tool-section" role="region" aria-labelledby="drawing-tools-heading">
+                <header>
+                    <h2 id="drawing-tools-heading">Drawing Tools</h2>
+                    <div class="tooltip">
+                        <button class="help-icon" aria-label="Help for drawing tools" aria-describedby="tools-help">?</button>
+                        <div class="tooltiptext" id="tools-help">
+                            Brush=Drawing, Bucket=Fill (standard paint bucket), Shapes=Geometric • Right-click anywhere to erase
+                        </div>
+                    </div>
+                </header>
+                
+                <div class="tool-grid" role="radiogroup" aria-labelledby="drawing-tools-heading">
+                    <button class="tool active" data-tool="brush" title="Brush (B)" role="radio" aria-checked="true" aria-label="Brush tool" tabindex="0">
+                        <span class="tool-icon-brush" aria-hidden="true"></span>
+                    </button>
+                    <button class="tool" data-tool="fill" title="Fill (F) - Standard paint bucket tool" role="radio" aria-checked="false" aria-label="Fill tool" tabindex="-1">
+                        <span class="tool-icon-bucket" aria-hidden="true"></span>
+                    </button>
+                    <button class="tool" data-tool="shapes" title="Shapes (S)" role="radio" aria-checked="false" aria-label="Shapes tool" tabindex="-1">
+                        <span class="tool-icon-shapes" aria-hidden="true"></span>
+                    </button>
+                    <button class="tool" data-tool="select" title="Select" role="radio" aria-checked="false" aria-label="Select tool" tabindex="-1">
+                        <span class="tool-icon-select" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Brush Settings Section -->
+            <section class="tool-section" role="region" aria-labelledby="brush-settings-heading">
+                <header>
+                    <h2 id="brush-settings-heading">Brush Settings</h2>
+                </header>
+                
+                <div class="brush-controls">
+                    <div class="brush-shape-selector">
+                        <div class="brush-shape-toggle">
+                            <span class="brush-shape-label">● Round</span>
+                            <label class="toggle-switch" for="brush-shape">
+                                <input type="checkbox" id="brush-shape" name="brush-shape" aria-label="Toggle brush shape between round and square">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="brush-shape-label">■ Square</span>
+                        </div>
+                    </div>
+                    <label for="brush-size" class="visually-hidden">Brush size</label>
+                    <input type="range" class="slider" id="brush-size" name="brush-size" 
+                           min="1" max="16" value="1" aria-describedby="size-display">
+                    <div class="size-display" id="size-display" aria-live="polite">
+                        Size: <span>1px</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Advanced Fill Tools Section -->
+            <section id="fill-tools-section" class="tool-section fill-tools" role="region" aria-labelledby="fill-tools-heading" style="display: none;">
+                <div class="tool-header">
+                    <h3 id="fill-tools-heading">🎨 Advanced Fills</h3>
+                    <button id="fill-help-btn" class="btn-help" title="Fill Tool Help" aria-label="Get help with fill tools">?</button>
+                </div>
+                
+                <div class="tool-controls">
+                    <!-- Fill Type Selector -->
+                    <div class="control-group">
+                        <label for="fill-type-select">Fill Type:</label>
+                        <select id="fill-type-select" class="control-select" aria-describedby="fill-description">
+                            <option value="flood">🌊 Flood Fill</option>
+                            <option value="pattern">🔲 Pattern Fill</option>
+                            <option value="gradient">🌅 Gradient Fill</option>
+                            <option value="fractal">🌀 Fractal Fill</option>
+                            <option value="smart">🧠 Smart Fill</option>
+                            <option value="texture">🧱 Texture Fill</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Fill Options Panel -->
+                    <div id="fill-options-panel" class="options-panel" role="region" aria-labelledby="fill-type-select">
+                        <div class="fill-description" id="fill-description">
+                            Standard flood fill - fills connected areas of same color
+                        </div>
+                        <!-- Options will be populated dynamically by FillToolManager -->
+                    </div>
+                    
+                    <!-- Fill Actions -->
+                    <div class="control-group fill-actions">
+                        <button id="fill-preview-btn" class="btn" title="Preview Fill" aria-label="Preview fill operation">👁 Preview</button>
+                        <button id="fill-reset-btn" class="btn" title="Reset Options" aria-label="Reset fill options to defaults">🔄 Reset</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shape Library Section -->
+            <section class="tool-section" role="region" aria-labelledby="shape-library-heading">
+                <header>
+                    <h2 id="shape-library-heading">Shape Library</h2>
+                </header>
+                
+                <!-- Basic Shapes -->
+                <div class="shape-category">
+                    <h3 class="shape-category-title">Basic</h3>
+                    <div class="shapes-grid shape-category-grid" role="radiogroup" aria-labelledby="shape-library-heading">
+                        <button class="shape-tool active" data-shape="line" title="Line" role="radio" aria-checked="true" aria-label="Line shape" tabindex="0">
+                            <span class="shape-icon-line" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="rect" title="Rectangle" role="radio" aria-checked="false" aria-label="Rectangle shape" tabindex="-1">
+                            <span class="shape-icon-rect" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="circle" title="Circle" role="radio" aria-checked="false" aria-label="Circle shape" tabindex="-1">
+                            <span class="shape-icon-circle" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="ellipse" title="Ellipse" role="radio" aria-checked="false" aria-label="Ellipse shape" tabindex="-1">
+                            <span class="shape-icon-ellipse" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="triangle" title="Triangle" role="radio" aria-checked="false" aria-label="Triangle shape" tabindex="-1">
+                            <span class="shape-icon-triangle" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="diamond" title="Diamond" role="radio" aria-checked="false" aria-label="Diamond shape" tabindex="-1">
+                            <span class="shape-icon-diamond" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Polygons -->
+                <div class="shape-category">
+                    <h3 class="shape-category-title">Polygons</h3>
+                    <div class="shapes-grid shape-category-grid" role="radiogroup" aria-labelledby="shape-library-heading">
+                        <button class="shape-tool" data-shape="pentagon" title="Pentagon" role="radio" aria-checked="false" aria-label="Pentagon shape" tabindex="-1">
+                            <span class="shape-icon-pentagon" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="hexagon" title="Hexagon" role="radio" aria-checked="false" aria-label="Hexagon shape" tabindex="-1">
+                            <span class="shape-icon-hexagon" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="octagon" title="Octagon" role="radio" aria-checked="false" aria-label="Octagon shape" tabindex="-1">
+                            <span class="shape-icon-octagon" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="star" title="Star" role="radio" aria-checked="false" aria-label="Star shape" tabindex="-1">
+                            <span class="shape-icon-star" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="trapezoid" title="Trapezoid" role="radio" aria-checked="false" aria-label="Trapezoid shape" tabindex="-1">
+                            <span class="shape-icon-trapezoid" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="parallelogram" title="Parallelogram" role="radio" aria-checked="false" aria-label="Parallelogram shape" tabindex="-1">
+                            <span class="shape-icon-parallelogram" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="kite" title="Kite" role="radio" aria-checked="false" aria-label="Kite shape" tabindex="-1">
+                            <span class="shape-icon-kite" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Arrows -->
+                <div class="shape-category">
+                    <h3 class="shape-category-title">Arrows</h3>
+                    <div class="shapes-grid shape-category-grid" role="radiogroup" aria-labelledby="shape-library-heading">
+                        <button class="shape-tool" data-shape="arrow-up" title="Arrow Up" role="radio" aria-checked="false" aria-label="Arrow Up shape" tabindex="-1">
+                            <span class="shape-icon-arrow-up" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="arrow-right" title="Arrow Right" role="radio" aria-checked="false" aria-label="Arrow Right shape" tabindex="-1">
+                            <span class="shape-icon-arrow-right" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="arrow-down" title="Arrow Down" role="radio" aria-checked="false" aria-label="Arrow Down shape" tabindex="-1">
+                            <span class="shape-icon-arrow-down" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="arrow-left" title="Arrow Left" role="radio" aria-checked="false" aria-label="Arrow Left shape" tabindex="-1">
+                            <span class="shape-icon-arrow-left" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Symbols -->
+                <div class="shape-category">
+                    <h3 class="shape-category-title">Symbols</h3>
+                    <div class="shapes-grid shape-category-grid" role="radiogroup" aria-labelledby="shape-library-heading">
+                        <button class="shape-tool" data-shape="x" title="X" role="radio" aria-checked="false" aria-label="X shape" tabindex="-1">
+                            <span class="shape-icon-x" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="plus" title="Plus" role="radio" aria-checked="false" aria-label="Plus shape" tabindex="-1">
+                            <span class="shape-icon-plus" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="heart" title="Heart" role="radio" aria-checked="false" aria-label="Heart shape" tabindex="-1">
+                            <span class="shape-icon-heart" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="lightning" title="Lightning" role="radio" aria-checked="false" aria-label="Lightning shape" tabindex="-1">
+                            <span class="shape-icon-lightning" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="moon" title="Moon" role="radio" aria-checked="false" aria-label="Moon shape" tabindex="-1">
+                            <span class="shape-icon-moon" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Complex -->
+                <div class="shape-category">
+                    <h3 class="shape-category-title">Complex</h3>
+                    <div class="shapes-grid shape-category-grid" role="radiogroup" aria-labelledby="shape-library-heading">
+                        <button class="shape-tool" data-shape="flower" title="Flower" role="radio" aria-checked="false" aria-label="Flower shape" tabindex="-1">
+                            <span class="shape-icon-flower" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="gear" title="Gear" role="radio" aria-checked="false" aria-label="Gear shape" tabindex="-1">
+                            <span class="shape-icon-gear" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="spiral" title="Spiral" role="radio" aria-checked="false" aria-label="Spiral shape" tabindex="-1">
+                            <span class="shape-icon-spiral" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="hourglass" title="Hourglass" role="radio" aria-checked="false" aria-label="Hourglass shape" tabindex="-1">
+                            <span class="shape-icon-hourglass" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mathematical -->
+                <div class="shape-category">
+                    <h3 class="shape-category-title">Mathematical</h3>
+                    <div class="shapes-grid shape-category-grid" role="radiogroup" aria-labelledby="shape-library-heading">
+                        <button class="shape-tool" data-shape="house" title="Horizontal Parabola" role="radio" aria-checked="false" aria-label="Horizontal Parabola shape" tabindex="-1">
+                            <span class="shape-icon-parabola-vertical" aria-hidden="true"></span>
+                        </button>
+                        <button class="shape-tool" data-shape="bowtie" title="Vertical Parabola" role="radio" aria-checked="false" aria-label="Vertical Parabola shape" tabindex="-1">
+                            <span class="shape-icon-parabola-horizontal" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Color Palette Section -->
+            <section class="tool-section" role="region" aria-labelledby="palette-heading">
+                <header>
+                    <h2 id="palette-heading">ZX Spectrum Palette</h2>
+                    <div class="tooltip">
+                        <button class="help-icon" aria-label="Help for color palette" aria-describedby="palette-help">?</button>
+                        <div class="tooltiptext" id="palette-help">
+                            Left=INK, Right=PAPER, 2 colors per 8×8 block<br>
+                            <strong>Click twice to DISABLE color:</strong> Preserves existing attribute in blocks
+                        </div>
+                    </div>
+                </header>
+                
+                <div class="color-indicator" id="color-indicator" aria-label="Current color indicator"></div>
+                <div class="palette" id="palette" role="radiogroup" aria-labelledby="palette-heading"></div>
+                
+                <div class="mode-controls">
+                    <button class="btn toggle" id="bright-toggle" onclick="app.toggleBright()" aria-pressed="false">
+                        <span class="mode-icon-bright" aria-hidden="true"></span>
+                        <span>Bright</span>
+                    </button>
+                    <button class="btn toggle" id="flash-toggle" onclick="app.toggleFlash()" aria-pressed="false">
+                        <span class="mode-icon-flash" aria-hidden="true"></span>
+                        <span>Flash</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Help Information -->
+            <section class="info" role="region" aria-labelledby="help-heading">
+                <h2 id="help-heading" class="visually-hidden">Help Information</h2>
+                
+                <dl class="help-content">
+                    <dt>⬇ Memory:</dt>
+                    <dd id="memory-display" aria-live="polite">Calculating...</dd>
+                    
+                    <dt>⌨ Shortcuts:</dt>
+                    <dd>B/F/S - Tools • G/1/2 - Grids<br>Ctrl+Z/Shift+Z - Undo/Redo • +/- Zoom</dd>
+                    
+                    <dt>◐ Colors:</dt>
+                    <dd>Diagonal indicator shows INK (left) & PAPER (right)<br>
+                        Disabled colors show checkerboard pattern<br>
+                        Click twice to DISABLE color (preserves existing)</dd>
+                    
+                    <dt>⟕ Drawing:</dt>
+                    <dd>Left-click=Draw • Right-click=Erase</dd>
+                    
+                    <dt>▣ Fill Tool:</dt>
+                    <dd>• Standard paint bucket behavior<br>
+                        • Fills connected pixels of same color<br>
+                        • Stops at different colored pixels<br>
+                        • Click paper fills with ink, click ink erases to paper</dd>
+                    
+                    <dt>🎨 Individual Color Control:</dt>
+                    <dd>• Click color once = SELECT & ENABLE<br>
+                        • Click same color twice = DISABLE (preserve existing)<br>
+                        • Click disabled color = RE-ENABLE<br>
+                        • Disabled colors show red slash overlay</dd>
+                    
+                    <dt>⊞ Grids:</dt>
+                    <dd>1×1=Pixel (adaptive opacity) • 8×8=Char (yellow) • 16×16=Structure (purple)<br>
+                        Note: 1×1 grid auto-hides at low zoom</dd>
+                </dl>
+            </section>
+        </aside>
+
+        <!-- Canvas Area -->
+        <section class="canvas-area" role="main" aria-label="Drawing area">
+            <!-- Canvas Toolbar -->
+            <div class="toolbar" role="toolbar" aria-label="Canvas controls">
+                <div class="cursor-position" aria-live="polite">
+                    <span class="toolbar-label">+ Cursor:</span>
+                    <span id="cursor">0, 0</span>
+                </div>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="canvas-container" role="application" aria-label="ZX Spectrum drawing canvas container">
+                <div class="canvas-wrapper">
+                    <canvas id="canvas" name="drawingCanvas" width="256" height="192" 
+                            role="img" aria-label="ZX Spectrum drawing canvas" tabindex="0"></canvas>
+                    
+                    <!-- Grid Overlays -->
+                    <div id="grid-1x1" class="grid-overlay grid-1x1" aria-hidden="true"></div>
+                    <div id="grid-8x8" class="grid-overlay grid-8x8" aria-hidden="true"></div>
+                    <div id="grid-16x16" class="grid-overlay grid-16x16" aria-hidden="true"></div>
+                    
+                    <!-- Preview Canvas -->
+                    <canvas id="preview-canvas" width="256" height="192" 
+                            aria-hidden="true" style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 15; opacity: 1.0;"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Application Status Bar -->
+    <footer class="status" role="status" aria-live="polite">
+        <div class="status-left">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot" aria-hidden="true"></div>
+                <span>ZX Pixel Smoosher</span>
+            </div>
+            <div class="status-grid-controls">
+                <span class="toolbar-label">Grid:</span>
+                <button class="btn toggle" id="btn-grid-1x1" title="1x1 grid" aria-pressed="false">
+                    <span>1x1</span>
+                </button>
+                <button class="btn toggle" id="btn-grid-8x8" title="8x8 grid" aria-pressed="false">
+                    <span>8x8</span>
+                </button>
+                <button class="btn toggle" id="btn-grid-16x16" title="16x16 grid" aria-pressed="false">
+                    <span>16x16</span>
+                </button>
+            </div>
+        </div>
+        <div class="status-center">
+            <span id="status">System Ready</span>
+        </div>
+        <div class="status-right">
+            <span class="toolbar-label">Zoom:</span>
+            <select class="zoom-dropdown" id="zoomSelect" onchange="if(this.value === 'autofit') { app.autoFitZoom(true); } else { app.setZoom(parseInt(this.value)); }" aria-label="Zoom level">
+                <option value="autofit" selected>Auto Fit</option>
+                <option value="1">100%</option>
+                <option value="2">200%</option>
+                <option value="3">300%</option>
+                <option value="4">400%</option>
+                <option value="5">500%</option>
+                <option value="6">600%</option>
+                <option value="7">700%</option>
+                <option value="8">800%</option>
+                <option value="9">900%</option>
+                <option value="10">1000%</option>
+                <option value="11">1100%</option>
+                <option value="12">1200%</option>
+                <option value="13">1300%</option>
+                <option value="14">1400%</option>
+                <option value="15">1500%</option>
+                <option value="16">1600%</option>
+            </select>
+            <label for="zoom" class="visually-hidden">Zoom level slider</label>
+            <input type="range" class="slider" id="zoom" name="zoom" 
+                   min="1" max="16" value="2" step="1" aria-describedby="zoom-display">
+            <span id="zoom-display" class="zoom-display" aria-live="polite">200%</span>
+        </div>
+    </footer>
+
+    <!-- Scripts - Modular Architecture -->
+    <!-- Core Components -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    
+    <!-- Managers -->
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    
+    <!-- Shape System -->
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    
+    <!-- Main Application -->
+    <script src="js/ZXSpectrumPixelSmasher.js"></script>
+    <script>
+        let app;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                // Initialize ZX Spectrum Pixel Smasher application
+                app = new ZXSpectrumPixelSmasher();
+                window.app = app;
+                
+                // Emit DOM ready event for fill tools initialization
+                if (app && app.eventBus) {
+                    app.eventBus.emit('dom-ready');
+                }
+                
+                // Add example light up functions to global scope for testing
+                window.lightUpButton = function(selector, type) {
+                    app.lightUp(selector, type);
+                };
+                
+            } catch (error) {
+                console.error('Failed to initialize application:', error);
+                document.body.innerHTML = '<div style="color: red; padding: 20px; font-family: monospace;">Failed to load application: ' + error.message + '</div>';
+            }
+        });
+        
+        window.addEventListener('beforeunload', function() {
+            if (app && typeof app.destroy === 'function') {
+                app.destroy();
+            }
+        });
+        
+        // Auto-zoom on window resize
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            // Debounce resize events to avoid excessive recalculation
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                if (app && typeof app.autoZoomToFit === 'function') {
+                    app.autoZoomToFit();
+                }
+            }, 250); // Wait 250ms after resize stops
+        });
+    </script>
+
+    <!-- Fill Context Menu -->
+    <div id="fill-context-menu" class="fill-context-menu" role="menu" aria-labelledby="fill-menu-title">
+        <div id="fill-menu-title" class="visually-hidden">Fill Type Selection</div>
+        
+        <button class="fill-menu-item" data-fill-type="flood" role="menuitem" aria-describedby="flood-desc">
+            <span class="fill-menu-icon">🌊</span>
+            <div>
+                <div class="fill-menu-name">Flood Fill</div>
+                <div class="fill-menu-description" id="flood-desc">Standard paint bucket fill</div>
+            </div>
+        </button>
+        
+        <div class="fill-menu-separator"></div>
+        
+        <button class="fill-menu-item" data-fill-type="pattern" role="menuitem" aria-describedby="pattern-desc">
+            <span class="fill-menu-icon">🔲</span>
+            <div>
+                <div class="fill-menu-name">Pattern Fill</div>
+                <div class="fill-menu-description" id="pattern-desc">Fill with repeating patterns</div>
+            </div>
+        </button>
+        
+        <button class="fill-menu-item" data-fill-type="gradient" role="menuitem" aria-describedby="gradient-desc">
+            <span class="fill-menu-icon">🌅</span>
+            <div>
+                <div class="fill-menu-name">Gradient Fill</div>
+                <div class="fill-menu-description" id="gradient-desc">Smooth color transitions</div>
+            </div>
+        </button>
+        
+        <button class="fill-menu-item" data-fill-type="fractal" role="menuitem" aria-describedby="fractal-desc">
+            <span class="fill-menu-icon">🌀</span>
+            <div>
+                <div class="fill-menu-name">Fractal Fill</div>
+                <div class="fill-menu-description" id="fractal-desc">Mathematical fractal patterns</div>
+            </div>
+        </button>
+        
+        <div class="fill-menu-separator"></div>
+        
+        <button class="fill-menu-item" data-fill-type="smart" role="menuitem" aria-describedby="smart-desc">
+            <span class="fill-menu-icon">🧠</span>
+            <div>
+                <div class="fill-menu-name">Smart Fill</div>
+                <div class="fill-menu-description" id="smart-desc">Intelligent edge-aware filling</div>
+            </div>
+        </button>
+        
+        <button class="fill-menu-item" data-fill-type="texture" role="menuitem" aria-describedby="texture-desc">
+            <span class="fill-menu-icon">🧱</span>
+            <div>
+                <div class="fill-menu-name">Texture Fill</div>
+                <div class="fill-menu-description" id="texture-desc">Organic texture patterns</div>
+            </div>
+        </button>
+    </div>
+</body>
+</html>

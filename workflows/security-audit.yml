@@ -1,0 +1,296 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  schedule:
+    # Run security audit daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: JavaScript Security Audit
+      run: |
+        echo "🔍 Scanning JavaScript files for security vulnerabilities..."
+        
+        # Create security report directory
+        mkdir -p security-reports
+        
+        # Check for dangerous JavaScript patterns
+        echo "## JavaScript Security Scan Results" > security-reports/js-security.md
+        echo "**Scan Date:** $(date)" >> security-reports/js-security.md
+        echo "" >> security-reports/js-security.md
+        
+        # Check for eval() usage
+        echo "### eval() Usage Check" >> security-reports/js-security.md
+        if grep -r "eval(" js/ 2>/dev/null; then
+          echo "❌ **CRITICAL**: eval() found - potential code injection vulnerability" >> security-reports/js-security.md
+          grep -rn "eval(" js/ >> security-reports/js-security.md 2>/dev/null || true
+        else
+          echo "✅ No eval() usage detected" >> security-reports/js-security.md
+        fi
+        echo "" >> security-reports/js-security.md
+        
+        # Check for innerHTML with user input
+        echo "### innerHTML Security Check" >> security-reports/js-security.md
+        if grep -r "innerHTML.*=" js/ 2>/dev/null; then
+          echo "⚠️ **WARNING**: innerHTML usage found - verify no user input injection" >> security-reports/js-security.md
+          echo "Found instances:" >> security-reports/js-security.md
+          grep -rn "innerHTML.*=" js/ | head -10 >> security-reports/js-security.md 2>/dev/null || true
+        else
+          echo "✅ No innerHTML usage detected" >> security-reports/js-security.md
+        fi
+        echo "" >> security-reports/js-security.md
+        
+        # Check for document.write
+        echo "### document.write Security Check" >> security-reports/js-security.md
+        if grep -r "document\.write" js/ 2>/dev/null; then
+          echo "❌ **HIGH RISK**: document.write found - potential XSS vulnerability" >> security-reports/js-security.md
+          grep -rn "document\.write" js/ >> security-reports/js-security.md 2>/dev/null || true
+        else
+          echo "✅ No document.write usage detected" >> security-reports/js-security.md
+        fi
+        echo "" >> security-reports/js-security.md
+        
+        # Check for new Function() constructor
+        echo "### Function Constructor Check" >> security-reports/js-security.md
+        if grep -r "new Function\|Function(" js/ 2>/dev/null; then
+          echo "❌ **CRITICAL**: Function constructor found - potential code injection" >> security-reports/js-security.md
+          grep -rn "new Function\|Function(" js/ >> security-reports/js-security.md 2>/dev/null || true
+        else
+          echo "✅ No Function constructor usage detected" >> security-reports/js-security.md
+        fi
+        echo "" >> security-reports/js-security.md
+        
+        # Check for prototype pollution
+        echo "### Prototype Pollution Check" >> security-reports/js-security.md
+        if grep -r "__proto__\|constructor\.prototype" js/ 2>/dev/null; then
+          echo "⚠️ **WARNING**: Prototype manipulation detected" >> security-reports/js-security.md
+          grep -rn "__proto__\|constructor\.prototype" js/ >> security-reports/js-security.md 2>/dev/null || true
+        else
+          echo "✅ No prototype pollution patterns detected" >> security-reports/js-security.md
+        fi
+        echo "" >> security-reports/js-security.md
+        
+    - name: HTML Security Audit
+      run: |
+        echo "🔍 Scanning HTML files for security issues..."
+        
+        echo "## HTML Security Scan Results" > security-reports/html-security.md
+        echo "**Scan Date:** $(date)" >> security-reports/html-security.md
+        echo "" >> security-reports/html-security.md
+        
+        # Check for inline JavaScript
+        echo "### Inline JavaScript Check" >> security-reports/html-security.md
+        if grep -r "onclick=\|onload=\|onerror=" *.html 2>/dev/null; then
+          echo "⚠️ **WARNING**: Inline event handlers found" >> security-reports/html-security.md
+          grep -n "onclick=\|onload=\|onerror=" *.html >> security-reports/html-security.md 2>/dev/null || true
+        else
+          echo "✅ No inline event handlers detected" >> security-reports/html-security.md
+        fi
+        echo "" >> security-reports/html-security.md
+        
+        # Check for external script sources
+        echo "### External Script Sources Check" >> security-reports/html-security.md
+        if grep -r "src=['\"]http" *.html 2>/dev/null; then
+          echo "⚠️ **WARNING**: External script sources found - verify integrity" >> security-reports/html-security.md
+          grep -n "src=['\"]http" *.html >> security-reports/html-security.md 2>/dev/null || true
+        else
+          echo "✅ No external script sources detected" >> security-reports/html-security.md
+        fi
+        echo "" >> security-reports/html-security.md
+        
+        # Check for Content Security Policy
+        echo "### Content Security Policy Check" >> security-reports/html-security.md
+        if grep -r "Content-Security-Policy\|CSP" *.html 2>/dev/null; then
+          echo "✅ Content Security Policy found" >> security-reports/html-security.md
+        else
+          echo "⚠️ **RECOMMENDATION**: Consider adding Content Security Policy headers" >> security-reports/html-security.md
+        fi
+        echo "" >> security-reports/html-security.md
+        
+    - name: CSS Security Audit  
+      run: |
+        echo "🔍 Scanning CSS files for security issues..."
+        
+        echo "## CSS Security Scan Results" > security-reports/css-security.md
+        echo "**Scan Date:** $(date)" >> security-reports/css-security.md
+        echo "" >> security-reports/css-security.md
+        
+        # Check for external CSS imports
+        echo "### External CSS Import Check" >> security-reports/css-security.md
+        if grep -r "@import.*http\|url(.*http" css/ 2>/dev/null; then
+          echo "⚠️ **WARNING**: External CSS resources found" >> security-reports/css-security.md
+          grep -rn "@import.*http\|url(.*http" css/ >> security-reports/css-security.md 2>/dev/null || true
+        else
+          echo "✅ No external CSS resources detected" >> security-reports/css-security.md
+        fi
+        echo "" >> security-reports/css-security.md
+        
+        # Check for javascript: URLs in CSS
+        echo "### JavaScript URLs in CSS Check" >> security-reports/css-security.md
+        if grep -r "javascript:" css/ 2>/dev/null; then
+          echo "❌ **CRITICAL**: JavaScript URLs found in CSS" >> security-reports/css-security.md
+          grep -rn "javascript:" css/ >> security-reports/css-security.md 2>/dev/null || true
+        else
+          echo "✅ No JavaScript URLs in CSS detected" >> security-reports/css-security.md
+        fi
+        echo "" >> security-reports/css-security.md
+        
+    - name: Dependency Security Check
+      run: |
+        echo "🔍 Checking for dependency vulnerabilities..."
+        
+        # Check if package.json exists
+        if [ -f "package.json" ]; then
+          npm audit --audit-level=moderate > security-reports/npm-audit.txt 2>&1 || true
+          
+          echo "## Dependency Security Results" > security-reports/dependency-security.md
+          echo "**Scan Date:** $(date)" >> security-reports/dependency-security.md
+          echo "" >> security-reports/dependency-security.md
+          
+          if npm audit --audit-level=high > /dev/null 2>&1; then
+            echo "✅ No high-severity vulnerabilities found in dependencies" >> security-reports/dependency-security.md
+          else
+            echo "❌ **HIGH PRIORITY**: High-severity vulnerabilities found" >> security-reports/dependency-security.md
+            echo "Run 'npm audit fix' to resolve issues" >> security-reports/dependency-security.md
+          fi
+        else
+          echo "## Dependency Security Results" > security-reports/dependency-security.md
+          echo "**Scan Date:** $(date)" >> security-reports/dependency-security.md
+          echo "" >> security-reports/dependency-security.md
+          echo "✅ No package.json found - pure JavaScript project with no dependencies" >> security-reports/dependency-security.md
+        fi
+        
+    - name: File Permission Audit
+      run: |
+        echo "🔍 Auditing file permissions..."
+        
+        echo "## File Permission Audit Results" > security-reports/file-permissions.md
+        echo "**Scan Date:** $(date)" >> security-reports/file-permissions.md
+        echo "" >> security-reports/file-permissions.md
+        
+        # Check for executable JavaScript files
+        echo "### Executable File Check" >> security-reports/file-permissions.md
+        if find . -name "*.js" -executable 2>/dev/null | grep -v node_modules; then
+          echo "⚠️ **WARNING**: Executable JavaScript files found" >> security-reports/file-permissions.md
+          find . -name "*.js" -executable | grep -v node_modules >> security-reports/file-permissions.md 2>/dev/null || true
+        else
+          echo "✅ No executable JavaScript files detected" >> security-reports/file-permissions.md
+        fi
+        echo "" >> security-reports/file-permissions.md
+        
+        # Check for world-writable files
+        echo "### World-Writable Files Check" >> security-reports/file-permissions.md
+        if find . -type f -perm -002 2>/dev/null | grep -v node_modules; then
+          echo "⚠️ **WARNING**: World-writable files found" >> security-reports/file-permissions.md
+          find . -type f -perm -002 | grep -v node_modules >> security-reports/file-permissions.md 2>/dev/null || true
+        else
+          echo "✅ No world-writable files detected" >> security-reports/file-permissions.md
+        fi
+        
+    - name: Generate Security Summary
+      run: |
+        echo "📊 Generating security summary..."
+        
+        cat > security-reports/SECURITY-SUMMARY.md << 'EOF'
+        # ZX Pixel Smoosher - Security Audit Summary
+        
+        **Audit Date:** $(date)
+        **Repository:** ZX Pixel Smoosher Graphics Editor
+        
+        ## Security Assessment Overview
+        
+        This automated security audit scans the ZX Pixel Smoosher codebase for common web application security vulnerabilities.
+        
+        ### Audit Categories:
+        - ✅ **JavaScript Security**: Code injection, XSS vulnerabilities
+        - ✅ **HTML Security**: Inline handlers, external resources  
+        - ✅ **CSS Security**: External imports, JavaScript URLs
+        - ✅ **Dependencies**: Known vulnerability database checks
+        - ✅ **File Permissions**: Executable and writable file detection
+        
+        ### Security Status:
+        EOF
+        
+        # Count critical, warning, and success items
+        CRITICAL=$(grep -c "❌.*CRITICAL" security-reports/*.md 2>/dev/null || echo "0")
+        WARNING=$(grep -c "⚠️.*WARNING" security-reports/*.md 2>/dev/null || echo "0")  
+        SUCCESS=$(grep -c "✅" security-reports/*.md 2>/dev/null || echo "0")
+        
+        echo "- **Critical Issues**: $CRITICAL" >> security-reports/SECURITY-SUMMARY.md
+        echo "- **Warnings**: $WARNING" >> security-reports/SECURITY-SUMMARY.md
+        echo "- **Passed Checks**: $SUCCESS" >> security-reports/SECURITY-SUMMARY.md
+        echo "" >> security-reports/SECURITY-SUMMARY.md
+        
+        if [ "$CRITICAL" -gt 0 ]; then
+          echo "🚨 **SECURITY ALERT**: Critical vulnerabilities detected!" >> security-reports/SECURITY-SUMMARY.md
+          echo "Immediate action required before deployment." >> security-reports/SECURITY-SUMMARY.md
+        elif [ "$WARNING" -gt 0 ]; then
+          echo "⚠️ **SECURITY NOTICE**: Warnings detected." >> security-reports/SECURITY-SUMMARY.md
+          echo "Review recommended before production deployment." >> security-reports/SECURITY-SUMMARY.md
+        else
+          echo "✅ **SECURITY STATUS**: All checks passed!" >> security-reports/SECURITY-SUMMARY.md
+          echo "No critical security issues detected." >> security-reports/SECURITY-SUMMARY.md
+        fi
+        
+        echo "" >> security-reports/SECURITY-SUMMARY.md
+        echo "### Detailed Reports:" >> security-reports/SECURITY-SUMMARY.md
+        echo "- JavaScript Security: [js-security.md](./js-security.md)" >> security-reports/SECURITY-SUMMARY.md
+        echo "- HTML Security: [html-security.md](./html-security.md)" >> security-reports/SECURITY-SUMMARY.md
+        echo "- CSS Security: [css-security.md](./css-security.md)" >> security-reports/SECURITY-SUMMARY.md
+        echo "- Dependency Security: [dependency-security.md](./dependency-security.md)" >> security-reports/SECURITY-SUMMARY.md
+        echo "- File Permissions: [file-permissions.md](./file-permissions.md)" >> security-reports/SECURITY-SUMMARY.md
+        
+        # Set exit code based on critical issues
+        if [ "$CRITICAL" -gt 0 ]; then
+          echo "Security audit failed with $CRITICAL critical issues"
+          exit 1
+        fi
+        
+    - name: Upload security reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-audit-reports
+        path: security-reports/
+        retention-days: 90
+        
+    - name: Comment security summary on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          try {
+            const summary = fs.readFileSync('security-reports/SECURITY-SUMMARY.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## 🔐 Security Audit Results\n\n' + summary
+            });
+          } catch (error) {
+            console.log('Could not read security summary file');
+          }

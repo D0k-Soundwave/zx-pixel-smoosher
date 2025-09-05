@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Classes</title>
+</head>
+<body>
+    <h1>Testing Fill Classes</h1>
+    <div id="output"></div>
+    
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        try {
+            output.innerHTML += '<p>Testing class availability...</p>';
+            
+            // Test if classes are available
+            output.innerHTML += '<p>FillManager class: ' + (typeof FillManager !== 'undefined' ? 'Available' : 'NOT AVAILABLE') + '</p>';
+            output.innerHTML += '<p>FillToolManager class: ' + (typeof FillToolManager !== 'undefined' ? 'Available' : 'NOT AVAILABLE') + '</p>';
+            
+            if (typeof FillManager !== 'undefined' && typeof FillToolManager !== 'undefined') {
+                // Test instantiation
+                const eventBus = new EventBus();
+                const errorHandler = new ErrorHandler(eventBus);
+                const memoryManager = new MemoryManager({ eventBus });
+                const historyManager = new HistoryManager(eventBus, memoryManager);
+                
+                // Mock stateManager and colorManager for testing
+                const stateManager = {
+                    getState: () => ({
+                        pixels: Array(192).fill().map(() => Array(256).fill(0)),
+                        attributes: Array(24).fill().map(() => Array(32).fill({ ink: 7, paper: 0, bright: false, flash: false }))
+                    }),
+                    saveState: () => {},
+                    emitStateChange: () => {}
+                };
+                
+                const colorManager = {
+                    getState: () => ({ ink: 7, paper: 0, bright: false, flash: false, inkEnabled: true, paperEnabled: true })
+                };
+                
+                output.innerHTML += '<p>Attempting to create FillManager...</p>';
+                const fillManager = new FillManager(eventBus, stateManager, colorManager, memoryManager);
+                output.innerHTML += '<p>FillManager created successfully!</p>';
+                
+                output.innerHTML += '<p>Attempting to create FillToolManager...</p>';
+                const fillToolManager = new FillToolManager(eventBus, fillManager, colorManager);
+                output.innerHTML += '<p>FillToolManager created successfully!</p>';
+                
+                output.innerHTML += '<p>Testing activateFillTool method...</p>';
+                if (typeof fillToolManager.activateFillTool === 'function') {
+                    output.innerHTML += '<p>activateFillTool method exists!</p>';
+                    fillToolManager.activateFillTool();
+                    output.innerHTML += '<p>activateFillTool called successfully!</p>';
+                } else {
+                    output.innerHTML += '<p>ERROR: activateFillTool method not found!</p>';
+                }
+                
+            }
+        } catch (error) {
+            output.innerHTML += '<p style="color: red;">ERROR: ' + error.message + '</p>';
+            output.innerHTML += '<p style="color: red;">Stack: ' + error.stack + '</p>';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Fill Manager Initialization</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+        }
+        .debug-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #4b5563;
+            border-radius: 8px;
+            background: #374151;
+        }
+        .error {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .success {
+            color: #10b981;
+            font-weight: bold;
+        }
+        .warning {
+            color: #f59e0b;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Fill Manager Initialization</h1>
+    
+    <div class="debug-section">
+        <h2>Script Loading Status</h2>
+        <div id="script-status"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>Dependencies Status</h2>
+        <div id="dependencies-status"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>Initialization Attempt</h2>
+        <div id="initialization-status"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>Error Details</h2>
+        <div id="error-details"></div>
+    </div>
+
+    <!-- Load scripts in exact order from main application -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    
+    <script>
+        function debugLog(element, message, type = 'info') {
+            const div = document.getElementById(element);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : '';
+            div.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        }
+        
+        function checkScriptStatus() {
+            debugLog('script-status', 'Checking script loading status...');
+            debugLog('script-status', `EventBus available: ${typeof EventBus !== 'undefined'}`, typeof EventBus !== 'undefined' ? 'success' : 'error');
+            debugLog('script-status', `ErrorHandler available: ${typeof ErrorHandler !== 'undefined'}`, typeof ErrorHandler !== 'undefined' ? 'success' : 'error');
+            debugLog('script-status', `MemoryManager available: ${typeof MemoryManager !== 'undefined'}`, typeof MemoryManager !== 'undefined' ? 'success' : 'error');
+            debugLog('script-status', `HistoryManager available: ${typeof HistoryManager !== 'undefined'}`, typeof HistoryManager !== 'undefined' ? 'success' : 'error');
+            debugLog('script-status', `FillManager available: ${typeof FillManager !== 'undefined'}`, typeof FillManager !== 'undefined' ? 'success' : 'error');
+            debugLog('script-status', `FillToolManager available: ${typeof FillToolManager !== 'undefined'}`, typeof FillToolManager !== 'undefined' ? 'success' : 'error');
+        }
+        
+        function testInitialization() {
+            debugLog('initialization-status', 'Starting initialization test...');
+            
+            let eventBus, errorHandler, memoryManager, historyManager, stateManager, colorManager;
+            
+            try {
+                // Step 1: Initialize EventBus
+                debugLog('initialization-status', 'Creating EventBus...');
+                eventBus = new EventBus();
+                debugLog('initialization-status', 'EventBus created successfully', 'success');
+                
+                // Step 2: Initialize ErrorHandler
+                debugLog('initialization-status', 'Creating ErrorHandler...');
+                errorHandler = new ErrorHandler(eventBus);
+                debugLog('initialization-status', 'ErrorHandler created successfully', 'success');
+                
+                // Step 3: Initialize MemoryManager
+                debugLog('initialization-status', 'Creating MemoryManager...');
+                memoryManager = new MemoryManager(eventBus, {
+                    aggressiveMode: true,
+                    cleanupInterval: 3000,
+                    forceGCInterval: 8000,
+                    memoryThreshold: 30 * 1024 * 1024,
+                    objectPoolSize: 500,
+                    cacheLimit: 50
+                });
+                debugLog('initialization-status', 'MemoryManager created successfully', 'success');
+                
+                // Step 4: Initialize HistoryManager (we need this for StateManager)
+                debugLog('initialization-status', 'Creating HistoryManager...');
+                historyManager = new HistoryManager(eventBus);
+                debugLog('initialization-status', 'HistoryManager created successfully', 'success');
+                
+                // Step 5: Initialize ColorManager (simplified mock)
+                debugLog('initialization-status', 'Creating ColorManager...');
+                colorManager = {
+                    state: { ink: 1, paper: 0 },
+                    getInkColor: () => 1,
+                    getPaperColor: () => 0
+                };
+                debugLog('initialization-status', 'ColorManager created successfully', 'success');
+                
+                // Step 6: Initialize StateManager (this is where it might fail)
+                debugLog('initialization-status', 'Creating StateManager...');
+                // We need to check what the actual StateManager class looks like
+                if (typeof StateManager !== 'undefined') {
+                    stateManager = new StateManager(eventBus, historyManager);
+                    debugLog('initialization-status', 'StateManager created successfully', 'success');
+                } else {
+                    debugLog('initialization-status', 'StateManager class not available - using mock', 'warning');
+                    stateManager = {
+                        getState: () => ({
+                            pixels: Array(192).fill(null).map(() => Array(256).fill(0)),
+                            attributes: Array(24).fill(null).map(() => Array(32).fill(0))
+                        }),
+                        saveState: (op) => console.log(`State saved: ${op}`)
+                    };
+                }
+                
+                // Step 7: Test FillManager creation
+                debugLog('initialization-status', 'Creating FillManager...');
+                debugLog('dependencies-status', `EventBus: ${!!eventBus}`);
+                debugLog('dependencies-status', `StateManager: ${!!stateManager}`);
+                debugLog('dependencies-status', `ColorManager: ${!!colorManager}`);
+                debugLog('dependencies-status', `MemoryManager: ${!!memoryManager}`);
+                
+                const fillManager = new FillManager(eventBus, stateManager, colorManager, memoryManager);
+                debugLog('initialization-status', 'FillManager created successfully!', 'success');
+                
+                // Step 8: Test FillToolManager creation
+                debugLog('initialization-status', 'Creating FillToolManager...');
+                const fillToolManager = new FillToolManager(eventBus, fillManager, colorManager);
+                debugLog('initialization-status', 'FillToolManager created successfully!', 'success');
+                
+                debugLog('initialization-status', 'All managers created successfully - no issues found!', 'success');
+                
+            } catch (error) {
+                debugLog('initialization-status', `INITIALIZATION FAILED: ${error.message}`, 'error');
+                debugLog('error-details', `Error type: ${error.constructor.name}`, 'error');
+                debugLog('error-details', `Error message: ${error.message}`, 'error');
+                debugLog('error-details', `Stack trace: ${error.stack}`, 'error');
+                
+                // Check which dependency caused the failure
+                debugLog('error-details', 'Dependency status at time of failure:');
+                debugLog('error-details', `EventBus: ${!!eventBus}`);
+                debugLog('error-details', `ErrorHandler: ${!!errorHandler}`);
+                debugLog('error-details', `MemoryManager: ${!!memoryManager}`);
+                debugLog('error-details', `HistoryManager: ${!!historyManager}`);
+                debugLog('error-details', `StateManager: ${!!stateManager}`);
+                debugLog('error-details', `ColorManager: ${!!colorManager}`);
+            }
+        }
+        
+        // Run tests when page loads
+        window.addEventListener('load', () => {
+            checkScriptStatus();
+            setTimeout(testInitialization, 100);
+        });
+    </script>
+</body>
+</html>

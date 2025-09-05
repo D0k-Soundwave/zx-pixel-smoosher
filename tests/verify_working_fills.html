@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verify Fill System Works</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f0f0f0; }
+        .test { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+        .info { background: #d1ecf1; }
+    </style>
+</head>
+<body>
+    <h1>Fill System Verification</h1>
+    <div id="results"></div>
+
+    <!-- Load scripts exactly like main app -->
+    <script src="js/core/EventBus.js"></script>
+    <script src="js/core/ErrorHandler.js"></script>
+    <script src="js/core/MemoryManager.js"></script>
+    <script src="js/managers/HistoryManager.js"></script>
+    <script src="js/managers/FillManager.js"></script>
+    <script src="js/managers/FillToolManager.js"></script>
+    <script src="js/shapes/ShapeGenerator.js"></script>
+    <script src="js/ZXSpectrumPixelSmasher.js"></script>
+
+    <script>
+        function addResult(test, status, message) {
+            const div = document.createElement('div');
+            div.className = `test ${status}`;
+            div.innerHTML = `<strong>${status.toUpperCase()}:</strong> ${test} - ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                addResult('Starting Test', 'info', 'Creating ZX Pixel Smoosher app...');
+                
+                // Create the actual app
+                const app = new ZXSpectrumPixelSmasher();
+                window.app = app; // Set global reference like the real app
+                
+                // Wait for initialization
+                setTimeout(() => {
+                    try {
+                        // Test 1: Check if managers exist
+                        const managersExist = !!(app.fillManager && app.fillToolManager);
+                        addResult('Managers Created', managersExist ? 'pass' : 'fail', 
+                            `FillManager: ${!!app.fillManager}, FillToolManager: ${!!app.fillToolManager}`);
+                        
+                        if (!managersExist) {
+                            addResult('Debug Info', 'info', 
+                                `Initialization failed: ${app.fillManagerInitializationFailed}, Error: ${app.fillManagerError?.error?.message || 'None'}`);
+                            return;
+                        }
+                        
+                        // Test 2: Check method availability
+                        const methodsAvailable = !!(
+                            app.fillManager.setFillType &&
+                            app.fillManager.fill &&
+                            app.fillToolManager.setFillType
+                        );
+                        addResult('Methods Available', methodsAvailable ? 'pass' : 'fail', 
+                            'All required methods present');
+                        
+                        // Test 3: Test pattern fill functionality
+                        try {
+                            app.fillManager.setFillType('pattern', { patternName: 'dots' });
+                            addResult('Pattern Fill Setup', 'pass', 'Pattern fill configured successfully');
+                            
+                            // Test actual fill operation
+                            app.fillManager.fill({ x: 50, y: 50, erase: false, type: 'pattern' });
+                            addResult('Pattern Fill Execution', 'pass', 'Pattern fill executed without error');
+                            
+                        } catch (fillError) {
+                            addResult('Pattern Fill Test', 'fail', 'Fill operation failed: ' + fillError.message);
+                        }
+                        
+                        // Test 4: Test context menu method (if it exists)
+                        try {
+                            if (typeof app.handleFillTypeSelection === 'function') {
+                                const result = app.handleFillTypeSelection('gradient');
+                                addResult('Context Menu Method', 'pass', 
+                                    `handleFillTypeSelection works: ${result}`);
+                            } else {
+                                addResult('Context Menu Method', 'info', 
+                                    'handleFillTypeSelection method not found (this is OK - it may be private)');
+                            }
+                        } catch (contextError) {
+                            addResult('Context Menu Method', 'fail', 
+                                'Context menu test failed: ' + contextError.message);
+                        }
+                        
+                        // Test 5: Final assessment
+                        if (managersExist && methodsAvailable) {
+                            addResult('OVERALL RESULT', 'pass', 
+                                '🎉 FILL SYSTEM IS WORKING! The "Advanced fill tools not available" error should not appear.');
+                        } else {
+                            addResult('OVERALL RESULT', 'fail', 
+                                '❌ Fill system has issues that need to be resolved.');
+                        }
+                        
+                    } catch (error) {
+                        addResult('Test Error', 'fail', 'Test failed: ' + error.message);
+                    }
+                }, 1000);
+                
+            } catch (error) {
+                addResult('Initialization Error', 'fail', 'Failed to create app: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>
