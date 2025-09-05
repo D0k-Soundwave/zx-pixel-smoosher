@@ -6,6 +6,7 @@
 
     // Performance optimization: Reduce console logging to essential errors only
     const DEBUG_MODE = false; // Set to true only for development
+    // Workflows test: This comment triggers GitHub Actions
     const log = DEBUG_MODE ? console.log : () => {};
     const warn = console.warn; // Keep warnings
     const error = console.error; // Keep errors
