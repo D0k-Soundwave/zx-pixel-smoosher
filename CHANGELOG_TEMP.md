@@ -1,36 +1,36 @@
-# ZX Pixel Smoosher v1.1.1
+# ZX Pixel Smoosher v1.1.2
 
-**Release Date:** 2025-09-05 16:45:08 UTC
+**Release Date:** 2025-09-05 16:48:06 UTC
 **Release Type:** patch
 
-## Changes since v1.1.0
+## Changes since v1.1.1
 
 ### 🚀 New Features
 _No new features in this release_
 
 ### 🐛 Bug Fixes
-- fix: add simplified GitHub Pages deployment workflow (D0k)
+- fix: remove npm cache from all workflows for pure JS project (D0k)
 
 ### 📚 Documentation
-- docs: trigger GitHub Pages deployment (D0k)
+_No documentation changes in this release_
 
 ### 🔧 Maintenance
 _No maintenance changes in this release_
 
 ### 🎨 ZX Spectrum Features
-- trigger: Deploy ZX Pixel Smoosher to GitHub Pages (D0k)
+_No ZX Spectrum specific changes in this release_
 
 ### ⚡ Performance Improvements
-_No performance improvements in this release_
+- fix: remove npm cache from all workflows for pure JS project (D0k)
 
 ### 📊 Technical Details
-- **Commit Range:** v1.1.0..HEAD
-- **Total Commits:** 5
+- **Commit Range:** v1.1.1..HEAD
+- **Total Commits:** 1
 - **Contributors:** 1
-- **Files Changed:** 3
-- **Lines Added:** 41
-- **Lines Deleted:** 0
+- **Files Changed:** 6
+- **Lines Added:** 0
+- **Lines Deleted:** 131
 
 ---
 
-**Full Changelog:** https://github.com/D0k-Soundwave/zx-pixel-smoosher/compare/v1.1.0...v1.1.1
+**Full Changelog:** https://github.com/D0k-Soundwave/zx-pixel-smoosher/compare/v1.1.1...v1.1.2
