@@ -1,16 +1,16 @@
-ZX Pixel Smoosher v1.1.2 Release Package
+ZX Pixel Smoosher v1.1.3 Release Package
 
-Release Date: 2025-09-05 16:48:06 UTC
+Release Date: 2025-09-06 09:59:43 UTC
 Release Type: patch
-Commit SHA: 02d82cb4847bba76a55857e01ff5a796883bffa4
+Commit SHA: 16ce2e541f509f01c5acb9bc4c1a6d7557e1f92a
 
 Package Contents:
-- zx-pixel-smoosher-v1.1.2.zip: Ready-to-run application
-- zx-pixel-smoosher-source-v1.1.2.zip: Complete source code
+- zx-pixel-smoosher-v1.1.3.zip: Ready-to-run application
+- zx-pixel-smoosher-source-v1.1.3.zip: Complete source code
 - *.sha256, *.md5: Checksums for verification
 
 Installation:
-1. Download zx-pixel-smoosher-v1.1.2.zip
+1. Download zx-pixel-smoosher-v1.1.3.zip
 2. Extract to your desired location
 3. Open index.html in any modern web browser
 4. Start creating ZX Spectrum graphics!
