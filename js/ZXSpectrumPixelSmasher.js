@@ -2886,7 +2886,7 @@
             this.eventBus.on('draw-shape-unified', (data) => this.drawShapeEnhanced(data));
             // Route fill operations to FillManager
             this.eventBus.on('flood-fill', (data) => {
-                this.fillManager.fill({ ...data, type: 'flood' });
+                this.floodFill(data);
             });
             this.eventBus.on('pattern-fill', (data) => {
                 this.fillManager.fill({ ...data, type: 'pattern' });
