@@ -473,6 +473,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = OptimizedHistoryManager;
 } else if (typeof window !== 'undefined') {
     window.OptimizedHistoryManager = OptimizedHistoryManager;
+    window.HistoryManager = OptimizedHistoryManager; // Alias for backward compatibility
 } else if (typeof global !== 'undefined') {
     global.OptimizedHistoryManager = OptimizedHistoryManager;
 }

@@ -487,64 +487,235 @@
         </div>
     </footer>
 
-    <!-- Scripts - Modular Architecture -->
-    <!-- Core Components -->
+    <!-- Scripts - Enhanced Modular Architecture v2.0 -->
+    <!-- Core Components (Legacy Foundation) -->
     <script src="js/core/EventBus.js"></script>
     <script src="js/core/ErrorHandler.js"></script>
     <script src="js/core/MemoryManager.js"></script>
     
-    <!-- Managers -->
+    <!-- Managers (Legacy) -->
     <script src="js/managers/HistoryManager.js"></script>
     <script src="js/managers/FillManager.js"></script>
     <script src="js/managers/FillToolManager.js"></script>
     
-    <!-- Shape System -->
+    <!-- Shape System (Legacy) -->
     <script src="js/shapes/ShapeGenerator.js"></script>
+
+    <!-- NEW: Modular Platform Architecture -->
+    <script src="js/core/platform/ServiceRegistry.js"></script>
+    <script src="js/core/platform/ModuleLoader.js"></script>
+    <script src="js/core/platform/CorePlatform.js"></script>
+    <script src="js/core/platform/LegacyCompatibilityWrapper.js"></script>
     
-    <!-- Main Application -->
+    <!-- NEW: Module System -->
+    <script src="js/modules/BaseModule.js"></script>
+    <script src="js/modules/HistoryManagerModule.js"></script>
+    <script src="js/modules/StateManagerModule.js"></script>
+    <script src="js/modules/ColorManagerModule.js"></script>
+    <script src="js/modules/CanvasService.js"></script>
+    
+    <!-- Main Application (Legacy) -->
     <script src="js/ZXSpectrumPixelSmasher.js"></script>
+
+    <!-- NEW: Modular Bootstrap (Initialization System) -->
+    <script src="js/ModularBootstrap.js"></script>
+    
     <script>
         let app;
+        const DEBUG_MODE = false;
+        
+        // Enhanced error handling for modular system
+        window.addEventListener('error', function(event) {
+            console.error('Global error caught:', event.error);
+            
+            // Route to modular error handling if available
+            if (window.modularSystem && window.modularSystem.getPlatform()) {
+                const platform = window.modularSystem.getPlatform();
+                if (platform.handleError) {
+                    platform.handleError(event.error, {
+                        source: 'global-error',
+                        filename: event.filename,
+                        lineno: event.lineno,
+                        colno: event.colno
+                    });
+                }
+            }
+        });
+
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            
+            // Route to modular error handling if available
+            if (window.modularSystem && window.modularSystem.getPlatform()) {
+                const platform = window.modularSystem.getPlatform();
+                if (platform.handleError) {
+                    platform.handleError(new Error(`Unhandled promise rejection: ${event.reason}`), {
+                        source: 'unhandled-rejection',
+                        promise: event.promise
+                    });
+                }
+            }
+            
+            event.preventDefault();
+        });
         
         document.addEventListener('DOMContentLoaded', function() {
             try {
-                // Initialize ZX Spectrum Pixel Smasher application
-                app = new ZXSpectrumPixelSmasher();
-                window.app = app;
+                console.log('🚀 ZX Pixel Smoosher v2.0 - Enhanced Modular Architecture');
                 
+                // Initialize modular system first
+                const initializeModularSystemAndApp = async () => {
+                    try {
+                        console.log('🚀 Initializing modular system...');
+                        
+                        // Check if initializeModularSystem helper is available
+                        if (typeof window.initializeModularSystem !== 'function') {
+                            throw new Error('CRITICAL: ModularBootstrap not loaded. Cannot proceed without complete modular architecture.');
+                        }
+                        
+                        // Initialize the modular system
+                        const modularSystem = window.initializeModularSystem({
+                            enableDebugMode: window.DEBUG_MODE || false,
+                            enableLegacyCompatibility: true,
+                            autoInitialize: true
+                        });
+                        
+                        // Wait for initialization to complete
+                        let attempts = 0;
+                        const maxAttempts = 100; // 5 seconds max wait
+                        
+                        const waitForInitialization = () => {
+                            if (modularSystem.isInitialized()) {
+                                console.log('✅ Modular system initialized successfully');
+                                
+                                // The modular system MUST provide window.app via LegacyCompatibilityWrapper
+                                app = window.app;
+                                
+                                if (!app) {
+                                    throw new Error('CRITICAL: Legacy compatibility wrapper failed to provide app interface. System cannot function.');
+                                }
+                                
+                                // Initialize application components
+                                initializeApplication();
+                                
+                            } else if (attempts < maxAttempts) {
+                                attempts++;
+                                console.log(`⏳ Waiting for modular system initialization... (${attempts}/${maxAttempts})`);
+                                setTimeout(waitForInitialization, 50);
+                            } else {
+                                throw new Error('CRITICAL: Modular system initialization timeout. System failed to start within 5 seconds.');
+                            }
+                        };
+                        
+                        waitForInitialization();
+                        
+                    } catch (error) {
+                        console.error('❌ Failed to initialize modular system:', error);
+                        throw error;
+                    }
+                };
+                
+                initializeModularSystemAndApp();
+                
+            } catch (error) {
+                console.error('❌ Failed to initialize application:', error);
+                document.body.innerHTML = `
+                    <div style="color: red; padding: 20px; font-family: monospace; background: #1a1a1a; border: 2px solid red; margin: 20px;">
+                        <h2>🚨 Application Initialization Failed</h2>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>Stack:</strong></p>
+                        <pre style="background: #000; padding: 10px; overflow: auto;">${error.stack}</pre>
+                        <button onclick="location.reload()" style="background: #ff4444; color: white; border: none; padding: 10px 20px; margin-top: 10px; cursor: pointer;">Reload Page</button>
+                    </div>
+                `;
+            }
+        });
+
+        function initializeApplication() {
+            try {
                 // Emit DOM ready event for fill tools initialization
                 if (app && app.eventBus) {
                     app.eventBus.emit('dom-ready');
+                    console.log('📡 Emitted dom-ready event');
                 }
                 
-                // Add example light up functions to global scope for testing
+                // Add utility functions to global scope
                 window.lightUpButton = function(selector, type) {
-                    app.lightUp(selector, type);
+                    if (app && app.lightUp) {
+                        app.lightUp(selector, type);
+                    }
                 };
                 
+                // Log system information
+                console.log('🎯 System initialized:', {
+                    modularSystem: !!window.modularSystem?.isInitialized(),
+                    legacyApp: !!app,
+                    version: app?.version || 'unknown',
+                    modules: window.modularSystem?.getPlatform()?.moduleLoader?.getAllModules()?.size || 0
+                });
+                
+                // Development helpers
+                if (DEBUG_MODE) {
+                    window.debugSystem = function() {
+                        console.group('🔍 System Debug Information');
+                        if (window.modularSystem) {
+                            console.log('Modular Metrics:', window.modularSystem.getMetrics());
+                            console.log('Platform Status:', window.modularSystem.getPlatform()?.getStatus());
+                            console.log('Legacy Compatibility:', window.modularSystem.getLegacyWrapper()?.getCompatibilityStatus());
+                        }
+                        console.log('App Instance:', app);
+                        console.groupEnd();
+                    };
+                    
+                    window.reloadSystem = function() {
+                        if (window.modularSystem) {
+                            return window.modularSystem.reload();
+                        }
+                    };
+                    
+                    console.log('🛠️ Debug mode active - use debugSystem() and reloadSystem() in console');
+                }
+                
             } catch (error) {
-                console.error('Failed to initialize application:', error);
-                document.body.innerHTML = '<div style="color: red; padding: 20px; font-family: monospace;">Failed to load application: ' + error.message + '</div>';
+                console.error('❌ Failed to complete application initialization:', error);
             }
-        });
+        }
         
         window.addEventListener('beforeunload', function() {
+            console.log('🛑 Application shutting down...');
+            
+            // Dispose modular system first
+            if (window.modularSystem) {
+                window.modularSystem.dispose();
+            }
+            
+            // Dispose legacy app
             if (app && typeof app.destroy === 'function') {
                 app.destroy();
             }
         });
         
-        // Auto-zoom on window resize
+        // Enhanced auto-zoom with modular system awareness
         let resizeTimeout;
         window.addEventListener('resize', function() {
-            // Debounce resize events to avoid excessive recalculation
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(function() {
-                if (app && typeof app.autoZoomToFit === 'function') {
-                    app.autoZoomToFit();
+                try {
+                    if (app && typeof app.autoZoomToFit === 'function') {
+                        app.autoZoomToFit();
+                    }
+                } catch (error) {
+                    console.warn('Error during auto-zoom:', error);
                 }
-            }, 250); // Wait 250ms after resize stops
+            }, 250);
         });
+
+        // Modular system event listeners
+        if (typeof window !== 'undefined') {
+            document.addEventListener('modular:initialized', function(event) {
+                console.log('🎉 Modular system fully initialized:', event.detail);
+            });
+        }
     </script>
 
     <!-- Fill Context Menu -->
